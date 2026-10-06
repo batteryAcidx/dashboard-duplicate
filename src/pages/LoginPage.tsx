@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { Lock, Mail, Eye, EyeOff, Info, X } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff } from 'lucide-react';
 
 interface LoginPageProps {
   onNavigate?: (path: string) => void;
+  onSignIn?: (email: string) => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = () => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [showForgotModal, setShowForgotModal] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,13 +28,21 @@ export const LoginPage: React.FC<LoginPageProps> = () => {
     // Simulated credential check
     setTimeout(() => {
       setIsLoading(false);
-      setErrorMessage("That email or password doesn't look right. Try again.");
-    }, 700);
+      if (onSignIn) {
+        onSignIn(email);
+      } else if (onNavigate) {
+        onNavigate('/queue');
+      }
+    }, 600);
   };
 
   const handleForgotClick = () => {
-    // Avoid native window.alert in iframe, show smooth in-UI modal
-    setShowForgotModal(true);
+    if (onNavigate) {
+      onNavigate('/forgot-password');
+    } else {
+      window.history.pushState({}, '', '/forgot-password');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
   };
 
   return (
@@ -170,44 +178,6 @@ export const LoginPage: React.FC<LoginPageProps> = () => {
           WedgeScale Dashboard Platform
         </p>
       </div>
-
-      {/* Forgot Password Modal (Safely replaces window.alert in iFrame) */}
-      {showForgotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-[#121727] border border-[#2f374e] rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#f59e0b]/10 border border-[#f59e0b]/30 flex items-center justify-center text-[#ffc174]">
-                  <Info className="w-5 h-5" />
-                </div>
-                <h3 className="font-['Space_Grotesk'] text-lg font-bold text-slate-100">
-                  Password Reset
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowForgotModal(false)}
-                className="text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800/50 transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="font-['Inter'] text-sm text-slate-300 leading-relaxed mb-6">
-              Please contact your dedicated WedgeScale account engineer to reset your dispatch security keys.
-            </p>
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowForgotModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] text-[#181105] font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
-              >
-                Got It
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
