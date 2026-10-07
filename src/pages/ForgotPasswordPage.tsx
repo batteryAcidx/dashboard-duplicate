@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Mail, ArrowLeft, MailCheck } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface ForgotPasswordPageProps {
   onNavigate?: (path: string) => void;
@@ -9,25 +10,37 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
 
+    setErrorMessage(null);
     setIsLoading(true);
 
-    // Simulated recovery dispatch
-    setTimeout(() => {
-      setIsLoading(false);
-      setIsSubmitted(true);
-    }, 600);
+    const redirectTarget = `${window.location.origin}/set-password`;
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: redirectTarget,
+        });
+      } catch (err) {
+        console.warn('Reset password request:', err);
+      }
+    }
+
+    // Always show privacy-preserving confirmation that never reveals if email exists
+    setIsLoading(false);
+    setIsSubmitted(true);
   };
 
   const handleBackToLogin = () => {
     if (onNavigate) {
       onNavigate('/login');
     } else {
-      window.history.pushState({}, '', '/');
+      window.history.pushState({}, '', '/login');
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
   };
@@ -110,6 +123,12 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-7 pt-1 sm:pt-2">
+              {errorMessage && (
+                <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-['Inter'] leading-relaxed shadow-sm">
+                  {errorMessage}
+                </div>
+              )}
+
               {/* Email Field */}
               <div className="space-y-2 text-left">
                 <label className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300">

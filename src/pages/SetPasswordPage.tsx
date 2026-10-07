@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Eye, EyeOff, AlertTriangle, CheckCircle2, Check, X, ArrowRight } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface SetPasswordPageProps {
   onNavigate?: (path: string) => void;
 }
 
 export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) => {
-  // Query parameters or mode detection
-  const [mode, setMode] = useState<'invite' | 'reset'>('reset');
-  const [isExpired, setIsExpired] = useState(false);
+  const [hasValidSession, setHasValidSession] = useState<boolean | null>(null);
+  const [isInvite, setIsInvite] = useState<boolean>(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -18,25 +18,68 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
   const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const modeParam = params.get('mode') || params.get('type');
-      if (modeParam === 'invite' || modeParam === 'new' || modeParam === 'onboarding') {
-        setMode('invite');
-      } else {
-        setMode('reset');
-      }
-
-      if (params.get('expired') === 'true' || params.get('status') === 'expired') {
-        setIsExpired(true);
-      }
+    if (!isSupabaseConfigured) {
+      setHasValidSession(false);
+      return;
     }
+
+    let isMounted = true;
+
+    // Check existing session
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (!isMounted) return;
+      if (error || !session) {
+        // If there's an active token in the URL hash or code, give Supabase a moment to process the event
+        const hasUrlToken =
+          window.location.hash.includes('access_token') ||
+          window.location.hash.includes('type=recovery') ||
+          window.location.hash.includes('type=invite') ||
+          window.location.search.includes('code=');
+
+        if (!hasUrlToken) {
+          setHasValidSession(false);
+        }
+      } else {
+        setHasValidSession(true);
+        const user = session.user;
+        if (user && !user.last_sign_in_at) {
+          setIsInvite(true);
+        }
+      }
+    });
+
+    // React directly to Supabase Auth state events
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) return;
+
+      if (event === 'PASSWORD_RECOVERY') {
+        setHasValidSession(true);
+        setIsInvite(false);
+      } else if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        if (session) {
+          setHasValidSession(true);
+          const user = session.user;
+          if (user && !user.last_sign_in_at) {
+            setIsInvite(true);
+          }
+        } else {
+          setHasValidSession(false);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setHasValidSession(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const hasMinLength = password.length >= 8;
   const passwordsMatch = password.length > 0 && password === confirmPassword;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -52,10 +95,40 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
 
     setIsLoading(true);
 
-    setTimeout(() => {
+    if (isSupabaseConfigured) {
+      try {
+        const { error } = await supabase.auth.updateUser({
+          password: password,
+        });
+
+        if (error) {
+          if (
+            error.message.toLowerCase().includes('session') ||
+            error.message.toLowerCase().includes('token') ||
+            error.message.toLowerCase().includes('expired') ||
+            error.message.toLowerCase().includes('auth')
+          ) {
+            setHasValidSession(false);
+            setIsLoading(false);
+            return;
+          }
+          setErrorMessage(error.message);
+          setIsLoading(false);
+          return;
+        }
+
+        setIsLoading(false);
+        setIsSuccess(true);
+        return;
+      } catch (err: any) {
+        setErrorMessage(err?.message || 'Failed to update password. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+    } else {
       setIsLoading(false);
-      setIsSuccess(true);
-    }, 600);
+      setErrorMessage('Supabase is not configured.');
+    }
   };
 
   const handleNavigate = (path: string) => {
@@ -66,6 +139,24 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
   };
+
+  // Don't treat as expired until initialization has completely finished
+  if (hasValidSession === null) {
+    return (
+      <div className="min-h-screen w-full bg-[#0e1322] flex flex-col items-center justify-center px-4 select-none">
+        <div className="flex flex-col items-center justify-center space-y-4 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-[#252939] border border-[#f59e0b]/50 flex items-center justify-center shadow-sm">
+            <div className="w-5 h-5 border-2 border-[#f59e0b] border-t-transparent rounded-full animate-spin" />
+          </div>
+          <p className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-400 font-bold">
+            Checking your link…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const isExpired = hasValidSession === false;
 
   return (
     <div className="min-h-screen w-full bg-[#0e1322] flex flex-col justify-between items-center px-4 py-12 sm:py-16 relative overflow-hidden select-none">
@@ -103,7 +194,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                 WEDGE<span className="text-[#ffc174]">SCALE</span>
               </span>
               <span className="font-['JetBrains_Mono'] text-[10px] sm:text-sm font-bold uppercase tracking-widest text-[#ffc174] bg-[#252939] border border-[#ffc174]/40 px-2 sm:px-2.5 py-0.5 rounded-lg shadow-sm">
-                {mode === 'invite' ? 'ONBOARDING' : 'SECURITY'}
+                {isInvite ? 'ONBOARDING' : 'SECURITY'}
               </span>
             </div>
 
@@ -113,7 +204,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                 ? 'This access link is no longer valid.'
                 : isSuccess
                 ? 'Your password has been saved.'
-                : mode === 'invite'
+                : isInvite
                 ? 'Welcome, set your password'
                 : 'Reset your password'}
             </p>
@@ -286,7 +377,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                 >
                   {isLoading
                     ? 'SAVING PASSWORD...'
-                    : mode === 'invite'
+                    : isInvite
                     ? 'SET PASSWORD'
                     : 'RESET PASSWORD'}
                 </button>

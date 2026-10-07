@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, Mail, Eye, EyeOff } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface LoginPageProps {
   onNavigate?: (path: string) => void;
@@ -12,28 +13,59 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    setSuccessMessage(null);
 
     if (!email || !password) {
       setErrorMessage('Please enter both email and password.');
       return;
     }
 
+    if (!isSupabaseConfigured) {
+      setErrorMessage('Supabase is not configured. Please provide VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      return;
+    }
+
     setIsLoading(true);
-    // Simulated credential check
-    setTimeout(() => {
-      setIsLoading(false);
-      if (onSignIn) {
-        onSignIn(email);
-      } else if (onNavigate) {
-        onNavigate('/queue');
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password,
+      });
+
+      if (error) {
+        if (
+          error.message.toLowerCase().includes('invalid login credentials') ||
+          error.message.toLowerCase().includes('invalid credential') ||
+          error.message.toLowerCase().includes('user not found')
+        ) {
+          setErrorMessage("That email or password doesn't look right. Try again.");
+        } else {
+          setErrorMessage(error.message || "That email or password doesn't look right. Try again.");
+        }
+        setIsLoading(false);
+        return;
       }
-    }, 600);
+
+      if (data?.user) {
+        setIsLoading(false);
+        const userEmail = data.user.email || email.trim();
+        if (onSignIn) {
+          onSignIn(userEmail);
+        } else if (onNavigate) {
+          onNavigate('/queue');
+        }
+      } else {
+        setIsLoading(false);
+        setErrorMessage("That email or password doesn't look right. Try again.");
+      }
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrorMessage(err?.message || "That email or password doesn't look right. Try again.");
+    }
   };
 
   const handleForgotClick = () => {
@@ -61,22 +93,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
 
           {/* Logo In The Middle with 'DASHBOARD' */}
           <div className="flex flex-col items-center justify-center mb-6 sm:mb-8">
-            {/* 1. Updated to Navbar Tile: bg-[#252939] and border-[#f59e0b]/50 */}
             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#252939] border border-[#f59e0b]/50 flex items-center justify-center shadow-sm mb-3.5 sm:mb-4">
               <svg
-                  viewBox="0 0 24 24"
-                  className="w-7 h-7 sm:w-8 sm:h-8 text-[#f59e0b]"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                viewBox="0 0 24 24"
+                className="w-7 h-7 sm:w-8 sm:h-8 text-[#f59e0b]"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
                 <path d="M10.27 20a2 2 0 0 0 3.46 0l8-14A2 2 0 0 0 20 3H4a2 2 0 0 0-1.73 3Z" fill="none" />
               </svg>
             </div>
 
-            {/* 2. Updated to Navbar Wordmark: tracking-tight & font-black */}
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
               <span className="font-['Space_Grotesk'] text-xl sm:text-3xl uppercase tracking-tight text-slate-100 font-black">
                 WEDGE<span className="text-[#ffc174]">SCALE</span>
@@ -96,12 +126,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
             {errorMessage && (
               <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-['Inter'] leading-relaxed shadow-sm">
                 {errorMessage}
-              </div>
-            )}
-
-            {successMessage && (
-              <div className="p-3.5 rounded-xl bg-amber-950/40 border border-[#f59e0b]/40 text-[#ffc174] text-xs font-['Inter'] leading-relaxed">
-                {successMessage}
               </div>
             )}
 

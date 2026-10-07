@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Compass } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 interface NotFoundPageProps {
   onNavigate?: (path: string) => void;
@@ -45,35 +45,23 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({ onNavigate }) => {
               </svg>
             </div>
 
-            {/* Wordmark */}
+            {/* Wordmark + 404 Badge */}
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
               <span className="font-['Space_Grotesk'] text-xl sm:text-3xl uppercase tracking-tight text-slate-100 font-black">
                 WEDGE<span className="text-[#ffc174]">SCALE</span>
               </span>
-              <span className="font-['JetBrains_Mono'] text-[10px] sm:text-sm font-bold uppercase tracking-widest text-[#ffc174] bg-[#252939] border border-[#ffc174]/40 px-2 sm:px-2.5 py-0.5 rounded-lg shadow-sm">
-                404 // LOST
+              <span className="font-['JetBrains_Mono'] text-[10px] sm:text-sm font-bold uppercase tracking-widest text-[#ffc174] bg-[#252939] border border-[#ffc174]/40 px-2.5 sm:px-3 py-0.5 rounded-lg shadow-sm">
+                404
               </span>
             </div>
-
-            <p className="font-['Inter'] text-xs sm:text-sm text-slate-400 mt-3 sm:mt-4 text-center max-w-sm leading-relaxed text-pretty">
-              The address you entered does not exist or has been moved.
-            </p>
           </div>
 
-          {/* Error Details Card */}
+          {/* Minimalist Message & Action */}
           <div className="space-y-6 pt-1 sm:pt-2">
-            <div className="p-4 sm:p-5 rounded-xl bg-[#0a0e1a] border border-[#272e42] flex items-start gap-3.5 text-left shadow-sm">
-              <div className="w-8 h-8 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 flex items-center justify-center shrink-0 text-[#ffc174] mt-0.5">
-                <Compass className="w-4 h-4 text-[#f59e0b]" />
-              </div>
-              <div className="space-y-1">
-                <p className="font-['Space_Grotesk'] text-sm font-bold text-slate-200 uppercase tracking-wide">
-                  Route Not Found
-                </p>
-                <p className="font-['Inter'] text-xs sm:text-sm text-slate-400 leading-relaxed">
-                  Head back to your live dispatch queue to monitor active requests and recoveries.
-                </p>
-              </div>
+            <div className="p-4 sm:p-5 rounded-xl bg-[#0a0e1a] border border-[#272e42] text-center shadow-sm">
+              <p className="font-['Inter'] text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
+                Page unavailable. Return to your live dispatch queue.
+              </p>
             </div>
 
             {/* Action CTA Button */}
