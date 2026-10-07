@@ -147,6 +147,8 @@ export default function App() {
   const isSetPasswordPage = currentPath === '/set-password';
   const isDirect404Preview = currentPath === '/404' || currentPath === '/not-found';
   const isQueuePage = currentPath === '/queue' || currentPath === '/dashboard';
+  const isConversationsRoute = currentPath.startsWith('/conversations/');
+  const conversationId = isConversationsRoute ? currentPath.replace('/conversations/', '').split('/')[0] : null;
 
   const isKnownPublicRoute =
     isLoginPage ||
@@ -163,8 +165,8 @@ export default function App() {
     );
   }
 
-  // Rule 2: Protect /queue: if user is signed out, redirect to /login
-  if (!isAuthenticated && isQueuePage) {
+  // Rule 2: Protect /queue and /conversations/:id: if user is signed out, redirect to /login
+  if (!isAuthenticated && (isQueuePage || isConversationsRoute)) {
     window.history.replaceState({}, '', '/login');
     return (
       <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
@@ -184,7 +186,7 @@ export default function App() {
   }
 
   // Rule 4: Unknown route and signed out: redirect to /login
-  if (!isAuthenticated && !isKnownPublicRoute && !isQueuePage) {
+  if (!isAuthenticated && !isKnownPublicRoute && !isQueuePage && !isConversationsRoute) {
     window.history.replaceState({}, '', '/login');
     return (
       <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
@@ -200,6 +202,17 @@ export default function App() {
         <NotFoundPage onNavigate={navigate} />
       ) : isForgotPasswordPage ? (
         <ForgotPasswordPage onNavigate={navigate} />
+      ) : isConversationsRoute ? (
+        isAuthenticated ? (
+          <QueuePage
+            onNavigate={navigate}
+            onSignOut={handleSignOut}
+            userEmail={userEmail}
+            selectedConversationId={conversationId}
+          />
+        ) : (
+          <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
+        )
       ) : isQueuePage ? (
         isAuthenticated ? (
           <QueuePage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} />
