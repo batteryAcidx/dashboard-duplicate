@@ -3,15 +3,19 @@ import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { SetPasswordPage } from './pages/SetPasswordPage';
 import { QueuePage } from './pages/QueuePage';
+import { SetupPage } from './pages/SetupPage'; // SETUP
+import { SettingsPage } from './pages/SettingsPage'; // SETTINGS
+import { AdminPage } from './pages/AdminPage'; // ADMIN
 import { NotFoundPage } from './pages/NotFoundPage';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
+
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
 
-  // FIX 4: strip trailing slashes, so /queue/ behaves like /queue
+  // strip trailing slashes, so /queue/ behaves like /queue
   const getCleanPath = (pathname: string) => {
     const clean = pathname.split('?')[0].trim().replace(/\/+$/, '');
     if (!clean) return '/login';
@@ -24,7 +28,7 @@ export default function App() {
     const rawSearch = window.location.search;
     const rawHash = window.location.hash;
 
-    // FIX 2: an expired or invalid email link should reach the set-password page too
+    // an expired or invalid email link should reach the set-password page too
     const hasLinkError =
       rawHash.includes('error_code=') ||
       rawHash.includes('error=access_denied') ||
@@ -60,7 +64,7 @@ export default function App() {
 
     let isMounted = true;
 
-    // FIX 1: wait for Supabase to initialize, but never hang if it fails
+    // wait for Supabase to initialize, but never hang if it fails
     supabase.auth
       .getSession()
       .then(({ data: { session } }) => {
@@ -160,6 +164,9 @@ export default function App() {
   const isSetPasswordPage = currentPath === '/set-password';
   const isDirect404Preview = currentPath === '/404' || currentPath === '/not-found';
   const isQueuePage = currentPath === '/queue' || currentPath === '/dashboard';
+  const isSetupPage = currentPath === '/setup' || currentPath === '/settings'; // SETUP and SETTINGS
+  const isAdminRoute = currentPath === '/admin' || currentPath.startsWith('/admin/'); // ADMIN
+  const adminAccountId = currentPath.startsWith('/admin/') ? currentPath.slice('/admin/'.length).split('/')[0] : null; // ADMIN
   const isConversationsRoute = currentPath.startsWith('/conversations/');
   const conversationId = isConversationsRoute ? currentPath.replace('/conversations/', '').split('/')[0] : null;
 
@@ -178,8 +185,8 @@ export default function App() {
     );
   }
 
-  // Rule 2: Protect /queue and /conversations/:id: if user is signed out, redirect to /login
-  if (!isAuthenticated && (isQueuePage || isConversationsRoute)) {
+  // Rule 2: Protect /queue, /setup and /conversations/:id: if user is signed out, redirect to /login
+  if (!isAuthenticated && (isQueuePage || isConversationsRoute || isSetupPage || isAdminRoute)) { // SETUP
     window.history.replaceState({}, '', '/login');
     return (
       <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
@@ -199,7 +206,7 @@ export default function App() {
   }
 
   // Rule 4: Unknown route and signed out: redirect to /login
-  if (!isAuthenticated && !isKnownPublicRoute && !isQueuePage && !isConversationsRoute) {
+    if (!isAuthenticated && !isKnownPublicRoute && !isQueuePage && !isConversationsRoute && !isSetupPage && !isAdminRoute) { // SETUP
     window.history.replaceState({}, '', '/login');
     return (
       <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
@@ -215,6 +222,22 @@ export default function App() {
         <NotFoundPage onNavigate={navigate} />
       ) : isForgotPasswordPage ? (
         <ForgotPasswordPage onNavigate={navigate} />
+            ) : isAdminRoute ? ( // ADMIN
+        isAuthenticated ? (
+          <AdminPage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} accountId={adminAccountId} />
+        ) : (
+          <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
+        )
+      ) : isSetupPage ? ( // SETUP
+        isAuthenticated ? (
+                    currentPath === '/settings' ? (
+            <SettingsPage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} />
+          ) : (
+            <SetupPage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} />
+          )
+        ) : (
+          <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
+        )
       ) : isConversationsRoute ? (
         isAuthenticated ? (
           <QueuePage

@@ -7,6 +7,9 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import { LeadStatusControl, LeadStatus, STATUS_LABEL } from './LeadStatusControl';
+
+export type WindowKey = '24h' | '7d' | '30d';
 
 export interface DashboardLead {
   id: string;
@@ -16,6 +19,10 @@ export interface DashboardLead {
   timeAgo: string;
   priority: boolean;
   unread: boolean;
+  status: LeadStatus;
+  finalValue: number | null;
+  statusChangedBy: 'system' | 'owner' | 'support';
+  statusChangedLabel: string;
   missedCallTime?: string;
   conversationTag: { icon: 'photos' | 'calendar'; label: string };
   secondaryTag?: { icon: 'photos' | 'calendar'; label: string };
@@ -28,6 +35,8 @@ export interface DashboardLead {
     time: string;
     hasAttachment?: boolean;
     dayDivider?: string;
+    kind?: 'message' | 'event';
+    eventActor?: 'system' | 'owner' | 'support';
   }[];
 }
 
@@ -51,6 +60,9 @@ interface DashboardBodyProps {
   selectedLeadId: string | null;
   onSelectLead: (id: string) => void;
   onBack?: () => void; // FIX 3
+  onChangeStatus?: (id: string, status: LeadStatus, finalValue: number | null) => Promise<string | null>;
+  windowKey?: WindowKey;
+  onWindowChange?: (w: WindowKey) => void;
 }
 
 export const DashboardBody: React.FC<DashboardBodyProps> = ({
@@ -65,6 +77,9 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
   selectedLeadId,
   onSelectLead,
   onBack, // FIX 3
+  onChangeStatus,
+  windowKey,
+  onWindowChange,
 }) => {
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'conversations'>('conversations');
   const [mobileView, setMobileView] = useState<'list' | 'chat'>(initialMobileView ?? 'list');
@@ -168,8 +183,37 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
         {/* TAB 1: Overview */}
         {dashboardTab === 'overview' && (
           <div className="flex-1 flex flex-col justify-start">
-            <div className="flex items-center justify-between pb-2 text-slate-400 font-['JetBrains_Mono'] text-[10.5px] sm:text-xs">
-              <span className="text-slate-400">{statsWindowLabel}</span>
+                        <div className="flex items-center justify-between gap-3 pb-2 text-slate-400 font-['JetBrains_Mono'] text-[10.5px] sm:text-xs">
+              <span className="text-slate-400 hidden sm:inline">{statsWindowLabel}</span>
+              {onWindowChange && windowKey && (
+                <div
+                  role="group"
+                  aria-label="Time window"
+                  className="inline-flex p-0.5 rounded-lg bg-[#090d18] border border-[#232839] w-full sm:w-auto"
+                >
+                  {(
+                    [
+                      ['24h', '24 hours'],
+                      ['7d', '7 days'],
+                      ['30d', '30 days'],
+                    ] as [WindowKey, string][]
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-pressed={windowKey === key}
+                      onClick={() => onWindowChange(key)}
+                      className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md font-['JetBrains_Mono'] text-[10.5px] sm:text-xs font-semibold transition-colors cursor-pointer ${
+                        windowKey === key
+                          ? 'bg-[#151b2b] border border-[#2b354d] text-[#ffc174]'
+                          : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5 py-1">
@@ -301,6 +345,17 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                                   {lead.secondaryTag.label}
                                 </span>
                               )}
+                                {lead.status !== 'booked' && (
+                                <span
+                                  className={`inline-flex items-center font-['JetBrains_Mono'] text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0 border ${
+                                    lead.status === 'won'
+                                      ? 'text-[#ffc174] bg-[#ffc174]/10 border-[#ffc174]/30'
+                                      : 'text-slate-300 bg-[#141a29]/80 border-white/[0.09]'
+                                  }`}
+                                >
+                                  {STATUS_LABEL[lead.status]}
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -354,11 +409,25 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                             <span className="text-slate-400 block sm:inline w-full sm:w-auto mt-0.5 sm:mt-0">{selectedLead.address}</span>
                           </div>
 
-                          {selectedLead.scheduledTime && (
-                            <div className="text-xs sm:text-[13px] text-[#ffc174] font-medium font-['JetBrains_Mono'] pt-0.5">
-                              {selectedLead.scheduledTime}
-                            </div>
-                          )}
+                                                    <div className="flex flex-col items-start gap-2 pt-0.5 sm:flex-row sm:items-center sm:justify-between">
+                            {selectedLead.scheduledTime ? (
+                              <div className="text-xs sm:text-[13px] text-[#ffc174] font-medium font-['JetBrains_Mono']">
+                                {selectedLead.scheduledTime}
+                              </div>
+                            ) : (
+                              <span />
+                            )}
+                            {onChangeStatus && (
+                              <LeadStatusControl
+                                key={selectedLead.id}
+                                status={selectedLead.status}
+                                finalValue={selectedLead.finalValue}
+                                changedBy={selectedLead.statusChangedBy}
+                                changedAtLabel={selectedLead.statusChangedLabel}
+                                onChange={(s, v) => onChangeStatus(selectedLead.id, s, v)}
+                              />
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -380,6 +449,32 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
 
                         {selectedLead.chatTranscript.map((msg, index) => {
                           const isWedge = msg.sender === 'wedge';
+                                                    if (msg.kind === 'event') {
+                            return (
+                              <React.Fragment key={index}>
+                                {msg.dayDivider && (
+                                  <div className="flex items-center justify-center my-3">
+                                    <span className="font-['JetBrains_Mono'] text-[9.5px] sm:text-[10px] uppercase tracking-widest text-slate-400 bg-[#0a0e19] border border-[#232a3f] px-3 py-0.5 rounded-full font-semibold">
+                                      {msg.dayDivider}
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="flex items-center justify-center py-0.5">
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#0a0e19] border border-[#232a3f] text-[10.5px] sm:text-[11px] font-['JetBrains_Mono'] text-slate-500 text-center leading-snug">
+                                    <span
+                                      className={`h-1 w-1 rounded-full shrink-0 ${
+                                        msg.eventActor === 'system' ? 'bg-slate-500' : 'bg-[#ffc174]'
+                                      }`}
+                                    />
+                                    <span>
+                                      {msg.text}
+                                      {msg.eventActor === 'system' ? ' · automatic' : ''} · {msg.time}
+                                    </span>
+                                  </span>
+                                </div>
+                              </React.Fragment>
+                            );
+                          }
                           return (
                             <React.Fragment key={index}>
                               {msg.dayDivider && (
