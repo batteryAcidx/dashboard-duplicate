@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Mail, ArrowLeft, MailCheck } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
@@ -6,34 +6,83 @@ interface ForgotPasswordPageProps {
   onNavigate?: (path: string) => void;
 }
 
+const COOLDOWN_SECONDS = 60;
+
 export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNavigate }) => {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
+  // count down the "send again" timer
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  const sendLink = async () => {
+    const clean = email.trim().toLowerCase();
+    if (!clean) return;
 
     setErrorMessage(null);
-    setIsLoading(true);
 
-    const redirectTarget = `${window.location.origin}/set-password`;
-
-    if (isSupabaseConfigured) {
-      try {
-        await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: redirectTarget,
-        });
-      } catch (err) {
-        console.warn('Reset password request:', err);
-      }
+    if (!isSupabaseConfigured) {
+      setErrorMessage('The dashboard is temporarily unavailable. Please try again shortly or contact support.');
+      return;
     }
 
-    // Always show privacy-preserving confirmation that never reveals if email exists
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(clean, {
+        redirectTo: `${window.location.origin}/set-password`,
+      });
+
+      if (error) {
+        const status = (error as { status?: number }).status;
+        const code = (error as { code?: string }).code;
+        const msg = (error.message || '').toLowerCase();
+
+        // Problems that say nothing about whether the account exists: show them
+        if (
+          status === 429 ||
+          code === 'over_email_send_rate_limit' ||
+          code === 'over_request_rate_limit' ||
+          msg.includes('rate limit') ||
+          msg.includes('security purposes')
+        ) {
+          setErrorMessage('Too many requests. Please wait a minute and try again.');
+          setCooldown(COOLDOWN_SECONDS);
+          setIsLoading(false);
+          return;
+        }
+
+        if (msg.includes('fetch') || msg.includes('network')) {
+          setErrorMessage('Could not reach the server. Check your connection and try again.');
+          setIsLoading(false);
+          return;
+        }
+
+        // Anything else (including "no such user"): stay silent so we never reveal which emails have accounts
+        console.warn('Reset password request:', error.message);
+      }
+    } catch (err) {
+      console.warn('Reset password request:', err);
+      setErrorMessage('Something went wrong. Please try again.');
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(false);
     setIsSubmitted(true);
+    setCooldown(COOLDOWN_SECONDS);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendLink();
   };
 
   const handleBackToLogin = () => {
@@ -46,7 +95,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#0e1322] flex flex-col justify-between items-center px-4 py-12 sm:py-16 relative overflow-hidden select-none">
+    <div className="min-h-screen w-full bg-[#0e1322] flex flex-col justify-between items-center px-4 py-12 sm:py-16 relative overflow-hidden">
       {/* Background Subtle Ambience */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[580px] h-[580px] bg-[#f59e0b]/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -87,7 +136,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
 
             <p className="font-['Inter'] text-xs sm:text-sm text-slate-400 mt-3 sm:mt-4 text-center max-w-sm leading-relaxed text-pretty">
               {isSubmitted
-                ? 'Your recovery request has been processed.'
+                ? 'Check your email.'
                 : 'Enter your email to recover access to your account.'}
             </p>
           </div>
@@ -95,7 +144,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
           {/* Confirmation or Form */}
           {isSubmitted ? (
             <div className="space-y-6 pt-1 sm:pt-2 animate-in fade-in duration-200">
-              {/* Refined Confirmation Banner */}
+              {/* Confirmation Banner */}
               <div className="p-4 sm:p-5 rounded-xl bg-[#0a0e1a] border border-[#272e42] flex items-start gap-3.5 shadow-sm">
                 <div className="w-8 h-8 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 flex items-center justify-center shrink-0 text-[#ffc174] mt-0.5">
                   <MailCheck className="w-4 h-4 text-[#f59e0b]" />
@@ -110,8 +159,17 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
                 </div>
               </div>
 
-              {/* Action Button */}
-              <div className="pt-2">
+              {errorMessage && (
+                <div
+                  role="alert"
+                  className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-['Inter'] leading-relaxed shadow-sm"
+                >
+                  {errorMessage}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="pt-2 space-y-4">
                 <button
                   type="button"
                   onClick={handleBackToLogin}
@@ -119,25 +177,53 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
                 >
                   RETURN TO LOGIN
                 </button>
+
+                <div className="text-center pt-1">
+                  <button
+                    type="button"
+                    onClick={sendLink}
+                    disabled={cooldown > 0 || isLoading}
+                    className="font-['JetBrains_Mono'] text-xs text-slate-400 hover:text-[#ffc174] transition-colors uppercase tracking-[0.16em] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading
+                      ? 'Sending...'
+                      : cooldown > 0
+                      ? `Send again in ${cooldown}s`
+                      : 'Send again'}
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-7 pt-1 sm:pt-2">
               {errorMessage && (
-                <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-['Inter'] leading-relaxed shadow-sm">
+                <div
+                  role="alert"
+                  className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-['Inter'] leading-relaxed shadow-sm"
+                >
                   {errorMessage}
                 </div>
               )}
 
               {/* Email Field */}
               <div className="space-y-2 text-left">
-                <label className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
+                <label
+                  htmlFor="recovery-email"
+                  className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300"
+                >
                   Email Address
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
+                    id="recovery-email"
+                    name="email"
                     type="email"
+                    inputMode="email"
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -151,10 +237,14 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
               <div className="pt-2 sm:pt-3 space-y-4">
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || cooldown > 0}
                   className="w-full inline-flex items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-['Space_Grotesk'] text-xs sm:text-base font-black uppercase tracking-widest text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60 disabled:opacity-50"
                 >
-                  {isLoading ? 'SENDING LINK...' : 'SEND RESET LINK'}
+                  {isLoading
+                    ? 'SENDING LINK...'
+                    : cooldown > 0
+                    ? `WAIT ${cooldown}S`
+                    : 'SEND RESET LINK'}
                 </button>
 
                 {/* Back to Login Link */}

@@ -7,6 +7,8 @@ interface LoginPageProps {
   onSignIn?: (email: string) => void;
 }
 
+const GENERIC_LOGIN_ERROR = "That email or password doesn't look right. Try again.";
+
 export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,13 +20,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!email || !password) {
+    if (!email.trim() || !password) {
       setErrorMessage('Please enter both email and password.');
       return;
     }
 
     if (!isSupabaseConfigured) {
-      setErrorMessage('Supabase is not configured. Please provide VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      setErrorMessage('The dashboard is temporarily unavailable. Please try again shortly or contact support.');
       return;
     }
 
@@ -37,14 +39,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
       });
 
       if (error) {
-        if (
-          error.message.toLowerCase().includes('invalid login credentials') ||
-          error.message.toLowerCase().includes('invalid credential') ||
-          error.message.toLowerCase().includes('user not found')
-        ) {
-          setErrorMessage("That email or password doesn't look right. Try again.");
+        const status = (error as { status?: number }).status;
+        const code = (error as { code?: string }).code;
+        const msg = (error.message || '').toLowerCase();
+
+        if (status === 429 || code === 'over_request_rate_limit' || msg.includes('rate limit')) {
+          setErrorMessage('Too many attempts. Please wait a few minutes and try again.');
+        } else if (code === 'email_not_confirmed' || msg.includes('not confirmed')) {
+          setErrorMessage('This account is not active yet. Use the link in your invite email, or contact support.');
+        } else if (msg.includes('fetch') || msg.includes('network')) {
+          setErrorMessage('Could not reach the server. Check your connection and try again.');
         } else {
-          setErrorMessage(error.message || "That email or password doesn't look right. Try again.");
+          // wrong password, unknown email, anything else: same message, never reveal which part was wrong
+          setErrorMessage(GENERIC_LOGIN_ERROR);
         }
         setIsLoading(false);
         return;
@@ -60,11 +67,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
         }
       } else {
         setIsLoading(false);
-        setErrorMessage("That email or password doesn't look right. Try again.");
+        setErrorMessage(GENERIC_LOGIN_ERROR);
       }
     } catch (err: any) {
       setIsLoading(false);
-      setErrorMessage(err?.message || "That email or password doesn't look right. Try again.");
+      setErrorMessage('Something went wrong. Please try again.');
     }
   };
 
@@ -78,7 +85,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#0e1322] flex flex-col justify-between items-center px-4 py-12 sm:py-16 relative overflow-hidden select-none">
+    <div className="min-h-screen w-full bg-[#0e1322] flex flex-col justify-between items-center px-4 py-12 sm:py-16 relative overflow-hidden">
       {/* Background Subtle Ambience */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[580px] h-[580px] bg-[#f59e0b]/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -124,20 +131,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-7 pt-1 sm:pt-2">
             {errorMessage && (
-              <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-['Inter'] leading-relaxed shadow-sm">
+              <div
+                role="alert"
+                className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-['Inter'] leading-relaxed shadow-sm"
+              >
                 {errorMessage}
               </div>
             )}
 
             {/* Email Field */}
             <div className="space-y-2 text-left">
-              <label className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
+              <label
+                htmlFor="login-email"
+                className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300"
+              >
                 Email Address
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
+                  id="login-email"
+                  name="email"
                   type="email"
+                  inputMode="email"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -150,7 +170,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
             {/* Password Field */}
             <div className="space-y-2 text-left pt-0.5 sm:pt-1">
               <div className="flex items-center justify-between pb-0.5">
-                <label className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
+                <label
+                  htmlFor="login-password"
+                  className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300"
+                >
                   Password
                 </label>
                 <button
@@ -164,6 +187,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
+                  id="login-password"
+                  name="password"
+                  autoComplete="current-password"
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
@@ -197,7 +223,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
       </div>
 
       {/* Bottom Footer Line */}
-      <div className="w-full text-center z-10 pt-8 pb-2">
+      <div className="w-full text-center z-10 pt-8 pb-2 space-y-2">
+        <a
+          href="https://wedgescale.com"
+          className="inline-block font-['JetBrains_Mono'] text-xs text-slate-400 hover:text-[#ffc174] transition-colors uppercase tracking-[0.16em]"
+        >
+          Back to wedgescale.com
+        </a>
         <p className="font-['JetBrains_Mono'] text-xs text-slate-500 uppercase tracking-widest">
           WedgeScale Dashboard Platform
         </p>

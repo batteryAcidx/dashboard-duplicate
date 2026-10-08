@@ -2,13 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { Lock, Eye, EyeOff, AlertTriangle, CheckCircle2, Check, X, ArrowRight } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
+// Keep this in sync with Supabase: Authentication > Sign In / Providers > Email > Minimum password length
+const MIN_PASSWORD_LENGTH = 10;
+
+// Read the link type ONCE, when this file loads. Supabase clears the address after it
+// processes the token, so reading it later in a component would find nothing.
+type LinkType = 'invite' | 'recovery' | null;
+
+const readLinkType = (): LinkType => {
+  if (typeof window === 'undefined') return null;
+  const all = `${window.location.hash}${window.location.search}`;
+  if (all.includes('type=invite')) return 'invite';
+  if (all.includes('type=recovery')) return 'recovery';
+  return null;
+};
+
+const INITIAL_LINK_TYPE: LinkType = readLinkType();
+
 interface SetPasswordPageProps {
   onNavigate?: (path: string) => void;
 }
 
 export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) => {
   const [hasValidSession, setHasValidSession] = useState<boolean | null>(null);
-  const [isInvite, setIsInvite] = useState<boolean>(false);
+  const [isInvite, setIsInvite] = useState<boolean>(INITIAL_LINK_TYPE === 'invite');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -25,11 +42,25 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
 
     let isMounted = true;
 
+    const applySession = (session: { user?: { last_sign_in_at?: string | null } } | null) => {
+      if (!session) return false;
+      setHasValidSession(true);
+      if (INITIAL_LINK_TYPE === 'invite') {
+        setIsInvite(true);
+      } else if (INITIAL_LINK_TYPE === 'recovery') {
+        setIsInvite(false);
+      } else if (session.user && !session.user.last_sign_in_at) {
+        // fallback when the link type could not be read
+        setIsInvite(true);
+      }
+      return true;
+    };
+
     // Check existing session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (!isMounted) return;
       if (error || !session) {
-        // If there's an active token in the URL hash or code, give Supabase a moment to process the event
+        // If there's a token in the address, give Supabase a moment to process it
         const hasUrlToken =
           window.location.hash.includes('access_token') ||
           window.location.hash.includes('type=recovery') ||
@@ -40,11 +71,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
           setHasValidSession(false);
         }
       } else {
-        setHasValidSession(true);
-        const user = session.user;
-        if (user && !user.last_sign_in_at) {
-          setIsInvite(true);
-        }
+        applySession(session);
       }
     });
 
@@ -56,35 +83,33 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
         setHasValidSession(true);
         setIsInvite(false);
       } else if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-        if (session) {
-          setHasValidSession(true);
-          const user = session.user;
-          if (user && !user.last_sign_in_at) {
-            setIsInvite(true);
-          }
-        } else {
-          setHasValidSession(false);
-        }
+        if (!applySession(session)) setHasValidSession(false);
       } else if (event === 'SIGNED_OUT') {
         setHasValidSession(false);
       }
     });
 
+    // Safety net: never sit on "Checking your link…" forever
+    const timeout = setTimeout(() => {
+      if (isMounted) setHasValidSession((prev) => (prev === null ? false : prev));
+    }, 5000);
+
     return () => {
       isMounted = false;
+      clearTimeout(timeout);
       subscription.unsubscribe();
     };
   }, []);
 
-  const hasMinLength = password.length >= 8;
+  const hasMinLength = password.length >= MIN_PASSWORD_LENGTH;
   const passwordsMatch = password.length > 0 && password === confirmPassword;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    if (password.length < 8) {
-      setErrorMessage('Password must be at least 8 characters.');
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setErrorMessage(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }
 
@@ -95,39 +120,50 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
 
     setIsLoading(true);
 
-    if (isSupabaseConfigured) {
-      try {
-        const { error } = await supabase.auth.updateUser({
-          password: password,
-        });
+    if (!isSupabaseConfigured) {
+      setIsLoading(false);
+      setErrorMessage('The dashboard is not connected to its database. Contact support.');
+      return;
+    }
 
-        if (error) {
-          if (
-            error.message.toLowerCase().includes('session') ||
-            error.message.toLowerCase().includes('token') ||
-            error.message.toLowerCase().includes('expired') ||
-            error.message.toLowerCase().includes('auth')
-          ) {
-            setHasValidSession(false);
-            setIsLoading(false);
-            return;
-          }
-          setErrorMessage(error.message);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+
+      if (error) {
+        const msg = (error.message || '').toLowerCase();
+        const code = (error as { code?: string }).code;
+        const status = (error as { status?: number }).status;
+
+        // The link/session is gone: show the expired screen
+        if (
+          error.name === 'AuthSessionMissingError' ||
+          status === 401 ||
+          status === 403 ||
+          msg.includes('session') ||
+          msg.includes('expired') ||
+          msg.includes('jwt')
+        ) {
+          setHasValidSession(false);
           setIsLoading(false);
           return;
         }
 
-        setIsLoading(false);
-        setIsSuccess(true);
-        return;
-      } catch (err: any) {
-        setErrorMessage(err?.message || 'Failed to update password. Please try again.');
+        if (code === 'weak_password' || msg.includes('weak') || msg.includes('at least')) {
+          setErrorMessage('That password is too easy to guess. Try a longer one with letters and numbers.');
+        } else if (code === 'same_password' || msg.includes('different from the old')) {
+          setErrorMessage('Choose a password you have not used before.');
+        } else {
+          setErrorMessage(error.message);
+        }
         setIsLoading(false);
         return;
       }
-    } else {
+
       setIsLoading(false);
-      setErrorMessage('Supabase is not configured.');
+      setIsSuccess(true);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to update password. Please try again.');
+      setIsLoading(false);
     }
   };
 
@@ -159,7 +195,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
   const isExpired = hasValidSession === false;
 
   return (
-    <div className="min-h-screen w-full bg-[#0e1322] flex flex-col justify-between items-center px-4 py-12 sm:py-16 relative overflow-hidden select-none">
+    <div className="min-h-screen w-full bg-[#0e1322] flex flex-col justify-between items-center px-4 py-12 sm:py-16 relative overflow-hidden">
       {/* Background Subtle Ambience */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[580px] h-[580px] bg-[#f59e0b]/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -268,10 +304,10 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
               <div className="pt-2">
                 <button
                   type="button"
-                  onClick={() => handleNavigate('/login')}
+                  onClick={() => handleNavigate('/queue')}
                   className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-['Space_Grotesk'] text-xs sm:text-base font-black uppercase tracking-widest text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60"
                 >
-                  LOG IN TO DASHBOARD
+                  OPEN DASHBOARD
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
@@ -287,12 +323,18 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
 
               {/* New Password Field */}
               <div className="space-y-2 text-left">
-                <label className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
+                <label
+                  htmlFor="new-password"
+                  className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300"
+                >
                   New Password
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
+                    id="new-password"
+                    name="new-password"
+                    autoComplete="new-password"
                     type={showPassword ? 'text' : 'password'}
                     required
                     value={password}
@@ -313,12 +355,18 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
 
               {/* Confirm Password Field */}
               <div className="space-y-2 text-left">
-                <label className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
+                <label
+                  htmlFor="confirm-password"
+                  className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300"
+                >
                   Confirm Password
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
+                    id="confirm-password"
+                    name="confirm-password"
+                    autoComplete="new-password"
                     type={showConfirmPassword ? 'text' : 'password'}
                     required
                     value={confirmPassword}
@@ -350,7 +398,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                       <span className="w-3.5 h-3.5 rounded-full border border-slate-600 flex items-center justify-center text-[8px] text-slate-500">•</span>
                     )}
                     <span className={hasMinLength ? 'text-slate-200' : 'text-slate-500'}>
-                      Minimum 8 characters
+                      Minimum {MIN_PASSWORD_LENGTH} characters
                     </span>
                   </div>
                   {confirmPassword.length > 0 && (

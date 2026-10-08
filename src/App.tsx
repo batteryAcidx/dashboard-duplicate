@@ -11,9 +11,10 @@ export default function App() {
   const [userEmail, setUserEmail] = useState<string>('');
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
 
+  // FIX 4: strip trailing slashes, so /queue/ behaves like /queue
   const getCleanPath = (pathname: string) => {
-    const clean = pathname.split('?')[0].trim();
-    if (!clean || clean === '/') return '/login';
+    const clean = pathname.split('?')[0].trim().replace(/\/+$/, '');
+    if (!clean) return '/login';
     return clean.startsWith('/') ? clean : `/${clean}`;
   };
 
@@ -23,8 +24,15 @@ export default function App() {
     const rawSearch = window.location.search;
     const rawHash = window.location.hash;
 
-    // If the URL contains a recovery or invite token, forward to /set-password while preserving token
+    // FIX 2: an expired or invalid email link should reach the set-password page too
+    const hasLinkError =
+      rawHash.includes('error_code=') ||
+      rawHash.includes('error=access_denied') ||
+      rawSearch.includes('error_code=');
+
+    // If the URL contains a recovery or invite token (or a link error), forward to /set-password while preserving it
     const hasRecoveryOrInviteToken =
+      hasLinkError ||
       rawSearch.includes('code=') ||
       rawSearch.includes('type=recovery') ||
       rawSearch.includes('type=invite') ||
@@ -52,18 +60,23 @@ export default function App() {
 
     let isMounted = true;
 
-    // Wait for Supabase to finish initializing session & process URL tokens
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!isMounted) return;
-      if (session?.user) {
-        setIsAuthenticated(true);
-        setUserEmail(session.user.email || '');
-      } else {
-        setIsAuthenticated(false);
-        setUserEmail('');
-      }
-      setIsAuthChecking(false);
-    });
+    // FIX 1: wait for Supabase to initialize, but never hang if it fails
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (!isMounted) return;
+        setIsAuthenticated(Boolean(session?.user));
+        setUserEmail(session?.user?.email || '');
+      })
+      .catch(() => {
+        if (isMounted) {
+          setIsAuthenticated(false);
+          setUserEmail('');
+        }
+      })
+      .finally(() => {
+        if (isMounted) setIsAuthChecking(false);
+      });
 
     // Register onAuthStateChange once
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
