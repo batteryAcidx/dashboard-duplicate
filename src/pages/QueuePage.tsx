@@ -329,11 +329,27 @@ export const QueuePage: React.FC<QueuePageProps> = ({
 
   /* ---------- map rows to what DashboardBody expects ---------- */
 
+  const ACTIVE_STATUSES = ['booked', 'following_up', 'needs_you'];
+
+  // priority only counts while the lead is still urgent
+  const isPriorityActive = (r: LeadRow): boolean => {
+    if (!r.priority || !ACTIVE_STATUSES.includes(r.status)) return false;
+    const open = r.appointments.filter((a) => a.status !== 'cancelled');
+    if (open.length > 0) {
+      const now = Date.now();
+      // every appointment is in the past: the urgent moment is over
+      if (!open.some((a) => new Date(a.starts_at).getTime() >= now)) return false;
+    }
+    return true;
+  };
+
   const latest = (r: LeadRow) =>
     r.messages.reduce((mx, m) => (m.sent_at > mx ? m.sent_at : mx), r.missed_call_at || r.created_at);
 
   const sortedRows = [...rows].sort((a, b) => {
-    if (a.priority !== b.priority) return a.priority ? -1 : 1;
+    const pa = isPriorityActive(a);
+    const pb = isPriorityActive(b);
+    if (pa !== pb) return pa ? -1 : 1;
     return latest(b).localeCompare(latest(a));
   });
 
@@ -406,7 +422,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       phone: r.phone || '',
       address: place || 'No address provided',
       timeAgo: ago(latest(r)),
-      priority: r.priority,
+      priority: isPriorityActive(r),
       unread: r.unread,
       status: (r.status as LeadStatus) || 'booked',
       finalValue: r.final_value,

@@ -115,6 +115,7 @@ const EditPanel: React.FC<EditPanelProps> = ({ lead, call, onDenied, onSaved }) 
   const [form, setForm] = useState(initial);
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const set = <K extends keyof typeof initial>(k: K, v: (typeof initial)[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -147,30 +148,52 @@ const EditPanel: React.FC<EditPanelProps> = ({ lead, call, onDenied, onSaved }) 
     return { changes: c, problem: null };
   };
 
-  const submit = async () => {
+    const validate = (): { changes: Record<string, unknown>; why: string } | null => {
     setError(null);
     const { changes, problem } = buildChanges();
-    if (problem) return setError(problem);
-    if (Object.keys(changes).length === 0) return setError('Change something first.');
-
+    if (problem) {
+      setError(problem);
+      return null;
+    }
+    if (Object.keys(changes).length === 0) {
+      setError('Change something first.');
+      return null;
+    }
     const why = reason.trim();
-    if (why.length < 3) return setError('Enter a reason (at least 3 characters). It is saved in the admin log.');
+    if (why.length < 3) {
+      setError('Enter a reason (at least 3 characters). It is saved in the admin log.');
+      return null;
+    }
+    return { changes, why };
+  };
 
-    if (!window.confirm('Save these changes? The client will see a "WedgeScale support" marker in the conversation.')) {
+  const review = () => {
+    if (validate()) setConfirming(true);
+  };
+
+  const save = async () => {
+    const v = validate();
+    if (!v) {
+      setConfirming(false);
       return;
     }
-
     setSaving(true);
     const r = await call<{ changed: boolean; lead?: Partial<LeadDetail>; events?: EventRow[] }>('edit_lead', {
       lead_id: lead.id,
-      changes,
-      reason: why,
+      changes: v.changes,
+      reason: v.why,
     });
     setSaving(false);
 
     if (r.status === 403) return onDenied();
-    if (r.error || !r.data) return setError(r.error || 'Could not save the changes.');
-    if (!r.data.changed) return setError('No changes were needed.');
+    if (r.error || !r.data) {
+      setConfirming(false);
+      return setError(r.error || 'Could not save the changes.');
+    }
+    if (!r.data.changed) {
+      setConfirming(false);
+      return setError('No changes were needed.');
+    }
     onSaved(r.data.lead || {}, r.data.events || []);
   };
 
@@ -263,9 +286,25 @@ const EditPanel: React.FC<EditPanelProps> = ({ lead, call, onDenied, onSaved }) 
         </p>
       )}
 
-      <button type="button" onClick={submit} disabled={saving} className={btn}>
-        {saving ? 'Saving…' : 'Save changes'}
-      </button>
+            {confirming ? (
+        <div className="p-3 rounded-lg bg-[#1a1710] border border-[#f59e0b]/40 space-y-3">
+          <p className="text-xs text-slate-200 leading-relaxed">
+            Save these changes? The client will see a "WedgeScale support" marker in the conversation.
+          </p>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={save} disabled={saving} className={btn}>
+              {saving ? 'Saving…' : 'Yes, save'}
+            </button>
+            <button type="button" onClick={() => setConfirming(false)} disabled={saving} className={ghost}>
+              Go back
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={review} disabled={saving} className={btn}>
+          Save changes
+        </button>
+      )}
     </div>
   );
 };
