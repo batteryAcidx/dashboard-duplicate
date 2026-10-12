@@ -489,7 +489,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     : '';
   const jobSummary = s ? (s.jobCount ? `${s.jobCount} of ${JOB_TYPES.length} values set` : 'Not set yet') : '';
   const calendarSummary = calendarStatus === 'done' ? 'Connected' : 'Set up during onboarding';
-  const initial = (companyName || loginEmail || 'U').charAt(0).toUpperCase();
+  const initial = (loginEmail || userEmail || 'U').charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-['Inter']">

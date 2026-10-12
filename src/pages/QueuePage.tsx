@@ -542,7 +542,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
               aria-expanded={menuOpen}
             >
                             <span className="w-6 h-6 rounded-full bg-[#1e273d] border border-[#2d3a5a] flex items-center justify-center text-[11px] font-bold text-[#ffc174] shrink-0 sm:hidden">
-                {(companyName || userEmail || 'U').charAt(0).toUpperCase()}
+                {(userEmail || 'U').charAt(0).toUpperCase()}
               </span>
               <span className="max-w-[140px] truncate hidden sm:inline">{userEmail}</span>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400" />

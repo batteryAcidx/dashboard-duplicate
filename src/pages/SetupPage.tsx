@@ -126,7 +126,7 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
   const percent = total > 0 ? Math.round((done / total) * 100) : 0;
   const isLive = accountStatus === 'live' || (total > 0 && done === total);
   const waiting = steps.filter((s) => s.status === 'waiting_on_you');
-  const initial = (companyName || userEmail || 'U').charAt(0).toUpperCase();
+const initial = (userEmail || 'U').charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-['Inter']">
