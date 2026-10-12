@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Clock, AlertCircle, Circle, LogOut, ArrowLeft, RotateCcw } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
+import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 
 type StepStatus = 'pending' | 'in_progress' | 'waiting_on_you' | 'done';
 
@@ -64,7 +65,7 @@ const dateLabel = (iso: string | null, tz: string) =>
 
 export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, userEmail = '' }) => {
   const [steps, setSteps] = useState<StepRow[]>([]);
-  const [companyName, setCompanyName] = useState('');
+  const [companyName, setCompanyName] = useState(getCachedCompany(userEmail));
   const [tz, setTz] = useState('America/Chicago');
   const [accountStatus, setAccountStatus] = useState('setup');
   const [loading, setLoading] = useState(true);
@@ -94,7 +95,10 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
     ]);
 
     if (acc.data) {
-      if (acc.data.name) setCompanyName(acc.data.name);
+      if (acc.data.name) {
+        setCompanyName(acc.data.name);
+        setCachedCompany(userEmail, acc.data.name);
+      }
       if (acc.data.timezone) setTz(acc.data.timezone);
       if (acc.data.status) setAccountStatus(acc.data.status);
     }
@@ -106,7 +110,7 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
       setSteps((st.data as StepRow[]) || []);
     }
     setLoading(false);
-  }, []);
+  }, [userEmail]);
 
   useEffect(() => {
     load();
@@ -199,8 +203,14 @@ const initial = (userEmail || 'U').charAt(0).toUpperCase();
         </button>
 
         {loading ? (
-          <div className="py-24 text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-slate-400">
-            Loading setup progress…
+          <div role="status" aria-label="Loading setup progress" className="mt-5 animate-pulse">
+            <div className="h-3 w-16 rounded bg-[#151b2b] mb-3" />
+            <div className="h-9 w-64 max-w-full rounded bg-[#151b2b] mb-6" />
+            <div className="space-y-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-20 rounded-xl bg-[#111625] border border-[#22283a]" />
+              ))}
+            </div>
           </div>
         ) : error ? (
           <div className="mx-auto max-w-md py-16 text-center space-y-4">

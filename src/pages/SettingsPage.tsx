@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronDown, LogOut, RotateCcw } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 
 // Keep in sync with Supabase: Authentication > Sign In / Providers > Email > Minimum password length
 const MIN_PASSWORD_LENGTH = 10;
@@ -58,6 +59,14 @@ const inputCls =
   "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-xl px-4 py-3 text-base font-['Inter'] text-slate-100 placeholder:text-slate-600 disabled:opacity-60";
 
 /* ---------- building blocks ---------- */
+
+const SkeletonRows: React.FC<{ count: number }> = ({ count }) => (
+  <div className="space-y-3 animate-pulse" aria-hidden="true">
+    {Array.from({ length: count }).map((_, i) => (
+      <div key={i} className="h-16 rounded-xl bg-[#111625] border border-[#22283a]" />
+    ))}
+  </div>
+);
 
 const Group: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div>
@@ -212,7 +221,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
   const [accountId, setAccountId] = useState('');
 
   // read-only
-  const [companyName, setCompanyName] = useState('');
+  const [companyName, setCompanyName] = useState(getCachedCompany(userEmail));
   const [territory, setTerritory] = useState('');
   const [tz, setTz] = useState('');
   const [calendarStatus, setCalendarStatus] = useState<string | null>(null);
@@ -309,6 +318,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
 
     setAccountId(a.id);
     setCompanyName(a.name || '');
+    setCachedCompany(user.email || userEmail, a.name || '');
     setTerritory(a.territory || '');
     setTz(a.timezone || '');
     setServiceArea(a.service_area || '');
@@ -550,9 +560,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
           Dashboard
         </button>
 
+                <div className="mt-5 mb-7">
+          <span className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#f59e0b] font-bold block mb-2">
+            ACCOUNT
+          </span>
+          <h1 className="font-['Space_Grotesk'] text-3xl sm:text-4xl font-black uppercase tracking-tight text-slate-100 leading-none">
+            Settings
+          </h1>
+        </div>
+
         {loading ? (
-          <div className="py-24 text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-slate-400">
-            Loading settings…
+          <div role="status" aria-label="Loading settings" className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <SkeletonRows count={4} />
+            <div className="hidden lg:block">
+              <SkeletonRows count={4} />
+            </div>
           </div>
         ) : loadError ? (
           <div className="mx-auto max-w-md py-16 text-center space-y-4">
@@ -568,14 +590,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
           </div>
         ) : (
           <>
-            <div className="mt-5 mb-7">
-              <span className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#f59e0b] font-bold block mb-2">
-                ACCOUNT
-              </span>
-              <h1 className="font-['Space_Grotesk'] text-3xl sm:text-4xl font-black uppercase tracking-tight text-slate-100 leading-none">
-                Settings
-              </h1>
-            </div>
+          
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
               <Group label="Your business">

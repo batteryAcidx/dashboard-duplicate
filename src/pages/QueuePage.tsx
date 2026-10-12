@@ -6,6 +6,7 @@ import { DashboardBody, DashboardLead, DashboardStats, WindowKey } from '../comp
 import { LeadStatus } from '../components/LeadStatusControl';
 import { buildChart } from '../lib/chart';
 import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
+import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 
 /* ---------- time helpers (use the ACCOUNT's time zone, not the browser's) ---------- */
 
@@ -128,7 +129,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   userEmail = '',
   selectedConversationId = null,
 }) => {
-  const [companyName, setCompanyName] = useState('');
+  const [companyName, setCompanyName] = useState(getCachedCompany(userEmail));
   const [tz, setTz] = useState('America/Chicago');
   const [jobValues, setJobValues] = useState<Record<string, number>>({});
   const [accountStatus, setAccountStatus] = useState('live');
@@ -164,7 +165,10 @@ export const QueuePage: React.FC<QueuePageProps> = ({
             .select('name, timezone, status')
       .maybeSingle()
       .then(({ data }) => {
-        if (data?.name) setCompanyName(data.name);
+        if (data?.name) {
+          setCompanyName(data.name);
+          setCachedCompany(userEmail, data.name);
+        }
         if (data?.timezone) setTz(data.timezone);
         if (data?.status) setAccountStatus(data.status);
       });

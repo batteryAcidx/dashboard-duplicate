@@ -8,6 +8,7 @@ import { SettingsPage } from './pages/SettingsPage'; // SETTINGS
 import { AdminPage } from './pages/AdminPage'; // ADMIN
 import { NotFoundPage } from './pages/NotFoundPage';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { clearAccountCache } from './lib/accountCache';
 
 
 export default function App() {
@@ -75,6 +76,7 @@ export default function App() {
       .catch(() => {
         if (isMounted) {
           setIsAuthenticated(false);
+          clearAccountCache();
           setUserEmail('');
         }
       })
