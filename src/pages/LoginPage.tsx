@@ -162,7 +162,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="contractor@roofingcompany.com"
-                  className="w-full pl-11 pr-4 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-xs sm:text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 transition-colors"
+                  className="w-full pl-11 pr-4 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-base sm:text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 transition-colors"
                 />
               </div>
             </div>

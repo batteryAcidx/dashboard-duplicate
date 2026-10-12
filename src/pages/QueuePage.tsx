@@ -4,6 +4,8 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { NotFoundPage } from './NotFoundPage';
 import { DashboardBody, DashboardLead, DashboardStats, WindowKey } from '../components/DashboardBody';
 import { LeadStatus } from '../components/LeadStatusControl';
+import { buildChart } from '../lib/chart';
+import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
 
 /* ---------- time helpers (use the ACCOUNT's time zone, not the browser's) ---------- */
 
@@ -139,6 +141,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const [windowKey, setWindowKey] = useState<WindowKey>('7d');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
   /* close the account menu on outside click */
   useEffect(() => {
@@ -212,6 +215,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
     } else {
       setError(null);
       setRows((data as unknown as LeadRow[]) || []);
+      setLastUpdated(Date.now());
     }
     setLoading(false);
   }, []);
@@ -254,6 +258,21 @@ export const QueuePage: React.FC<QueuePageProps> = ({
     if (!selectedLeadId) return;
     loadThread(selectedLeadId);
   }, [selectedLeadId, loadThread]);
+
+    const refreshAll = useCallback(async () => {
+    await Promise.all([loadLeads(true), selectedLeadId ? loadThread(selectedLeadId) : Promise.resolve()]);
+  }, [loadLeads, loadThread, selectedLeadId]);
+
+  const pull = usePullToRefresh(refreshAll);
+
+  // coming back to the app (unlocking the phone, switching apps) refreshes right away
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshAll();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshAll]);
 
   /* mark a lead read (one place only) */
   const markRead = useCallback(async (id: string) => {
@@ -484,6 +503,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       : 'No missed calls in this period.',
   };
 
+    const chart = buildChart(rows, windowKey, tz);
+
   /* ---------- render ---------- */
 
   if (selectedConversationId && !loading && !error && !rows.some((r) => r.id === selectedConversationId)) {
@@ -492,6 +513,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
 
   return (
     <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-['Inter']">
+          <PullIndicator pull={pull} lastUpdated={lastUpdated} />
       {/* compact header */}
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-9 pt-5 pb-3 flex items-center justify-between gap-4">
         <span className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight truncate">
@@ -516,9 +538,12 @@ export const QueuePage: React.FC<QueuePageProps> = ({
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#111728] border border-[#212b42] text-slate-300 text-xs"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#111728] border border-[#212b42] text-slate-300 text-xs"
               aria-expanded={menuOpen}
             >
+                            <span className="w-6 h-6 rounded-full bg-[#1e273d] border border-[#2d3a5a] flex items-center justify-center text-[11px] font-bold text-[#ffc174] shrink-0 sm:hidden">
+                {(companyName || userEmail || 'U').charAt(0).toUpperCase()}
+              </span>
               <span className="max-w-[140px] truncate hidden sm:inline">{userEmail}</span>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
             </button>
@@ -590,6 +615,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
           statsWindowLabel={windowLabel}
           windowKey={windowKey}
           onWindowChange={setWindowKey}
+          chart={chart}
           leads={leads}
           selectedLeadId={selectedLeadId}
           onSelectLead={handleSelect}

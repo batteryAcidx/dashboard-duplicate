@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Paperclip,
   Calendar,
@@ -8,6 +8,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { LeadStatusControl, LeadStatus, STATUS_LABEL } from './LeadStatusControl';
+import { OverviewChart } from './OverviewChart';
+import type { ChartData } from '../lib/chart';
 
 export type WindowKey = '24h' | '7d' | '30d';
 
@@ -59,11 +61,16 @@ interface DashboardBodyProps {
   leads: DashboardLead[];
   selectedLeadId: string | null;
   onSelectLead: (id: string) => void;
-  onBack?: () => void; // FIX 3
+  onBack?: () => void;
   onChangeStatus?: (id: string, status: LeadStatus, finalValue: number | null) => Promise<string | null>;
   windowKey?: WindowKey;
   onWindowChange?: (w: WindowKey) => void;
+  chart?: ChartData | null;
+  threadFooter?: React.ReactNode;
 }
+
+const telHref = (p: string) => `tel:${p.replace(/[^\d+]/g, '')}`;
+const mapsHref = (a: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a)}`;
 
 export const DashboardBody: React.FC<DashboardBodyProps> = ({
   companyName,
@@ -76,43 +83,53 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
   leads,
   selectedLeadId,
   onSelectLead,
-  onBack, // FIX 3
+  onBack,
   onChangeStatus,
   windowKey,
   onWindowChange,
+  chart,
+  threadFooter,
 }) => {
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'conversations'>('conversations');
   const [mobileView, setMobileView] = useState<'list' | 'chat'>(initialMobileView ?? 'list');
+  const endRef = useRef<HTMLDivElement>(null);
 
-  // FIX 3: keep the phone view in step with the address (browser Back, direct links)
+  // keep the phone view in step with the address (browser Back, direct links)
   useEffect(() => {
     setMobileView(selectedLeadId ? 'chat' : 'list');
   }, [selectedLeadId]);
 
   const selectedLead = leads.find((l) => l.id === selectedLeadId) || null;
   const unreadCount = leads.filter((l) => l.unread).length;
+  const threadLength = selectedLead ? selectedLead.chatTranscript.length : 0;
+
+  // on phones, open a conversation at the newest message
+  useEffect(() => {
+    if (!selectedLeadId || mobileView !== 'chat') return;
+    if (typeof window === 'undefined' || !window.matchMedia('(max-width: 1023px)').matches) return;
+    const t = setTimeout(() => endRef.current?.scrollIntoView({ block: 'end' }), 50);
+    return () => clearTimeout(t);
+  }, [selectedLeadId, mobileView, threadLength]);
 
   const handleSelectLead = (id: string) => {
     onSelectLead(id);
     setMobileView('chat');
   };
 
-  // FIX 3: the in-app Back button also updates the address
   const handleBackToQueue = () => {
     if (onBack) onBack();
     else setMobileView('list');
   };
 
+  const inThreadOnPhone = dashboardTab === 'conversations' && mobileView === 'chat';
+  const hasAddress = Boolean(selectedLead && selectedLead.address && selectedLead.address !== 'No address provided');
+
   return (
     <div className="max-w-5xl mx-auto w-full bg-[#0c101d]">
-      <div className="p-5 sm:p-7 lg:p-9 space-y-5 sm:space-y-6 lg:space-y-8 h-[560px] sm:h-[550px] lg:h-auto lg:min-h-[560px] flex flex-col justify-start overflow-hidden">
-        {/* Title row (optional, hidden on mobile inside a conversation) */}
+      <div className="p-4 pb-10 sm:p-7 lg:p-9 space-y-4 sm:space-y-6 lg:space-y-8 lg:min-h-[560px] flex flex-col justify-start">
+        {/* Title row (optional, hidden on phones inside a conversation) */}
         {!hideTitleRow && (
-          <div
-            className={`items-center justify-between gap-4 pb-1 ${
-              dashboardTab === 'conversations' && mobileView === 'chat' ? 'hidden lg:flex' : 'flex'
-            }`}
-          >
+          <div className={`items-center justify-between gap-4 pb-1 ${inThreadOnPhone ? 'hidden lg:flex' : 'flex'}`}>
             <div>
               <h3 className="font-['Space_Grotesk'] text-2xl sm:text-3xl font-black uppercase text-slate-100 tracking-tight leading-none">
                 Dashboard
@@ -121,7 +138,6 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                 {companyName}
               </span>
             </div>
-
             <div className="flex items-center gap-1.5 sm:gap-2 font-['JetBrains_Mono'] text-[10px] sm:text-[11px] lg:text-xs uppercase tracking-wider text-slate-400 font-semibold shrink-0">
               <span className="h-1.5 w-1.5 rounded-full bg-[#ffc174] animate-pulse shrink-0" />
               <span className="sm:hidden">{statusLabelShort ?? statusLabel}</span>
@@ -130,10 +146,10 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
           </div>
         )}
 
-        {/* Tabs row (hidden on mobile inside a conversation) */}
+        {/* Tabs (sticky on phones, hidden inside a conversation) */}
         <div
-          className={`w-full ${
-            dashboardTab === 'conversations' && mobileView === 'chat' ? 'hidden lg:block' : 'block'
+          className={`sticky top-0 z-30 -mx-4 px-4 py-2 sm:-mx-7 sm:px-7 bg-[#0c101d] lg:static lg:mx-0 lg:px-0 lg:py-0 ${
+            inThreadOnPhone ? 'hidden lg:block' : 'block'
           }`}
         >
           <div className="relative grid grid-cols-2 w-full p-1 rounded-xl bg-[#090d18] border border-[#232839]">
@@ -142,11 +158,10 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                 dashboardTab === 'overview' ? 'translate-x-0' : 'translate-x-full'
               }`}
             />
-
             <button
               type="button"
               onClick={() => setDashboardTab('overview')}
-              className={`relative z-10 w-full py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-['Space_Grotesk'] font-bold text-center transition-colors duration-200 ${
+              className={`relative z-10 w-full py-2.5 rounded-lg text-sm font-['Space_Grotesk'] font-bold text-center transition-colors duration-200 ${
                 dashboardTab === 'overview' ? 'text-slate-100' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -155,16 +170,14 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
             <button
               type="button"
               onClick={() => setDashboardTab('conversations')}
-              className={`relative z-10 w-full py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-['Space_Grotesk'] font-bold text-center transition-colors duration-200 flex items-center justify-center gap-1.5 sm:gap-2 ${
+              className={`relative z-10 w-full py-2.5 rounded-lg text-sm font-['Space_Grotesk'] font-bold text-center transition-colors duration-200 flex items-center justify-center gap-2 ${
                 dashboardTab === 'conversations' ? 'text-slate-100' : 'text-[#e6af6c] hover:text-[#ffc174]'
               }`}
             >
               <span>Conversations</span>
               <span
-                className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] sm:text-[10.5px] font-['JetBrains_Mono'] transition-colors duration-200 whitespace-nowrap ${
-                  dashboardTab === 'conversations'
-                    ? 'bg-[#212a3f] text-[#ffc174]'
-                    : 'bg-[#212a3f]/70 text-[#ffc174]'
+                className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-['JetBrains_Mono'] transition-colors duration-200 whitespace-nowrap ${
+                  dashboardTab === 'conversations' ? 'bg-[#212a3f] text-[#ffc174]' : 'bg-[#212a3f]/70 text-[#ffc174]'
                 }`}
               >
                 {unreadCount > 0 ? (
@@ -183,19 +196,15 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
         {/* TAB 1: Overview */}
         {dashboardTab === 'overview' && (
           <div className="flex-1 flex flex-col justify-start">
-                        <div className="flex items-center justify-between gap-3 pb-2 text-slate-400 font-['JetBrains_Mono'] text-[10.5px] sm:text-xs">
-              <span className="text-slate-400 hidden sm:inline">{statsWindowLabel}</span>
+            <div className="flex items-center justify-between gap-3 pb-3 text-slate-400 font-['JetBrains_Mono'] text-xs">
+              <span className="text-slate-400">{statsWindowLabel}</span>
               {onWindowChange && windowKey && (
-                <div
-                  role="group"
-                  aria-label="Time window"
-                  className="inline-flex p-0.5 rounded-lg bg-[#090d18] border border-[#232839] w-full sm:w-auto"
-                >
+                <div role="group" aria-label="Time window" className="inline-flex p-0.5 rounded-lg bg-[#090d18] border border-[#232839]">
                   {(
                     [
-                      ['24h', '24 hours'],
-                      ['7d', '7 days'],
-                      ['30d', '30 days'],
+                      ['24h', '24h'],
+                      ['7d', '7d'],
+                      ['30d', '30d'],
                     ] as [WindowKey, string][]
                   ).map(([key, label]) => (
                     <button
@@ -203,7 +212,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                       type="button"
                       aria-pressed={windowKey === key}
                       onClick={() => onWindowChange(key)}
-                      className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md font-['JetBrains_Mono'] text-[10.5px] sm:text-xs font-semibold transition-colors cursor-pointer ${
+                      className={`px-3.5 py-2 rounded-md font-['JetBrains_Mono'] text-xs font-semibold transition-colors cursor-pointer ${
                         windowKey === key
                           ? 'bg-[#151b2b] border border-[#2b354d] text-[#ffc174]'
                           : 'text-slate-400 hover:text-slate-200 border border-transparent'
@@ -218,54 +227,56 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5 py-1">
               <div className="rounded-xl bg-[#0e1322] p-4 sm:p-5 border border-[#252939] flex flex-col justify-start">
-                <span className="font-['JetBrains_Mono'] text-[10px] sm:text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
+                <span className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
                   RESPONSE SPEED
                 </span>
                 <div className="font-['Space_Grotesk'] text-2xl sm:text-3xl font-bold tracking-tight text-[#ffc174] tabular-nums mt-2 sm:mt-3 lg:mt-4">
                   {stats.responseSpeed}
                 </div>
-                <span className="font-['Inter'] text-[11px] sm:text-[11.5px] text-slate-400 block mt-1">
-                  Average response time.
-                </span>
+                <span className="font-['Inter'] text-xs sm:text-[11.5px] text-slate-400 block mt-1">Average response time.</span>
               </div>
 
               <div className="rounded-xl bg-[#0e1322] p-4 sm:p-5 border border-[#252939] flex flex-col justify-start">
-                <span className="font-['JetBrains_Mono'] text-[10px] sm:text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
+                <span className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
                   CALLS RESCUED
                 </span>
                 <div className="font-['Space_Grotesk'] text-2xl sm:text-3xl font-bold tracking-tight text-[#dee1f7] tabular-nums mt-2 sm:mt-3 lg:mt-4">
                   {stats.callsRescued}
                 </div>
-                <span className="font-['Inter'] text-[11px] sm:text-[11.5px] text-slate-400 block mt-1">
+                <span className="font-['Inter'] text-xs sm:text-[11.5px] text-slate-400 block mt-1">
                   <span className="sm:hidden">Missed calls captured.</span>
                   <span className="hidden sm:inline">Total missed calls captured.</span>
                 </span>
               </div>
 
               <div className="rounded-xl bg-[#0e1322] p-4 sm:p-5 border border-[#252939] flex flex-col justify-start">
-                <span className="font-['JetBrains_Mono'] text-[10px] sm:text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
+                <span className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
                   PIPELINE VALUE
                 </span>
                 <div className="font-['Space_Grotesk'] text-2xl sm:text-3xl font-bold tracking-tight text-[#ffc174] tabular-nums mt-2 sm:mt-3 lg:mt-4">
                   {stats.pipelineValue}
                 </div>
-                <span className="font-['Inter'] text-[11px] sm:text-[11.5px] text-slate-400 block mt-1">
+                <span className="font-['Inter'] text-xs sm:text-[11.5px] text-slate-400 block mt-1">
                   Based on your typical job values.
                 </span>
               </div>
 
               <div className="rounded-xl bg-[#0e1322] p-4 sm:p-5 border border-[#252939] flex flex-col justify-start">
-                <span className="font-['JetBrains_Mono'] text-[10px] sm:text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
+                <span className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
                   BOOKING RATE
                 </span>
                 <div className="font-['Space_Grotesk'] text-2xl sm:text-3xl font-bold tracking-tight text-[#ffc174] tabular-nums mt-2 sm:mt-3 lg:mt-4">
                   {stats.bookingRate}
                 </div>
-                <span className="font-['Inter'] text-[11px] sm:text-[11.5px] text-slate-400 block mt-1">
-                  {stats.bookingDetail}
-                </span>
+                <span className="font-['Inter'] text-xs sm:text-[11.5px] text-slate-400 block mt-1">{stats.bookingDetail}</span>
               </div>
             </div>
+
+            {chart && (
+              <div className="mt-4 lg:mt-5">
+                <OverviewChart chart={chart} />
+              </div>
+            )}
           </div>
         )}
 
@@ -273,30 +284,25 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
         {dashboardTab === 'conversations' && (
           <div className="pt-1 flex-1 flex flex-col min-h-0">
             {leads.length === 0 ? (
-              <div className="w-full h-full min-h-[360px] flex flex-col items-center justify-center text-center p-8 rounded-xl border border-dashed border-[#232839] bg-[#0c101d]/60">
+              <div className="w-full min-h-[300px] flex flex-col items-center justify-center text-center p-8 rounded-xl border border-dashed border-[#232839] bg-[#0c101d]/60">
                 <h4 className="font-['Space_Grotesk'] text-base font-bold text-slate-200 tracking-tight mb-1">
                   No missed calls yet
                 </h4>
-                <p className="text-xs text-slate-400 max-w-xs font-['Inter'] leading-relaxed">
+                <p className="text-sm lg:text-xs text-slate-400 max-w-xs font-['Inter'] leading-relaxed">
                   When someone misses you, they'll show up here.
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-12 min-h-0 lg:min-h-[420px] gap-6 lg:gap-8 flex-1">
                 {/* Left column: leads */}
-                <div
-                  className={`lg:col-span-5 space-y-3 overflow-y-auto ${
-                    mobileView === 'chat' ? 'hidden lg:block' : 'block'
-                  }`}
-                >
+                <div className={`lg:col-span-5 space-y-3 lg:overflow-y-auto ${mobileView === 'chat' ? 'hidden lg:block' : 'block'}`}>
                   {leads.map((lead) => {
                     const isSelected = selectedLead !== null && lead.id === selectedLead.id;
-                    const isUnread = lead.unread;
                     return (
                       <div
                         key={lead.id}
                         onClick={() => handleSelectLead(lead.id)}
-                        className={`group relative p-3.5 sm:p-4 rounded-xl border transition-all cursor-pointer ${
+                        className={`group relative p-4 rounded-xl border transition-all cursor-pointer ${
                           isSelected
                             ? 'lg:bg-[#181e2e] lg:border-[#f59e0b]/50 lg:shadow-[0_4px_24px_rgba(245,158,11,0.08)] bg-[#111625] hover:bg-[#151b2c] border-[#22283a]'
                             : 'bg-[#111625] hover:bg-[#151b2c] border-[#22283a]'
@@ -306,48 +312,48 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2 mb-1">
                               <div className="flex items-center gap-2 min-w-0">
-                                {isUnread && (
+                                {lead.unread && (
                                   <span
-                                    className="w-2 h-2 rounded-full bg-[#f59e0b] shrink-0 shadow-[0_0_8px_rgba(245,158,11,0.6)]"
+                                    className="w-2.5 h-2.5 lg:w-2 lg:h-2 rounded-full bg-[#f59e0b] shrink-0 shadow-[0_0_8px_rgba(245,158,11,0.6)]"
                                     title="Unread conversation"
                                   />
                                 )}
-                                <span className="font-['Space_Grotesk'] text-sm sm:text-[15px] font-bold text-slate-100 tracking-tight truncate block">
+                                <span className="font-['Space_Grotesk'] text-base lg:text-[15px] font-bold text-slate-100 tracking-tight truncate block">
                                   {lead.name}
                                 </span>
                                 {lead.priority && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-[#141a29]/80 border border-white/[0.09] text-[8.5px] sm:text-[9px] font-['JetBrains_Mono'] uppercase tracking-wider text-[#ffc174] font-semibold shrink-0 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-[#141a29]/80 border border-white/[0.09] text-[10px] lg:text-[9px] font-['JetBrains_Mono'] uppercase tracking-wider text-[#ffc174] font-semibold shrink-0 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
                                     PRIORITY
                                   </span>
                                 )}
                               </div>
-                              <span className="text-[10px] font-['JetBrains_Mono'] text-slate-500 shrink-0">
+                              <span className="text-[11px] lg:text-[10px] font-['JetBrains_Mono'] text-slate-500 shrink-0">
                                 {lead.timeAgo}
                               </span>
                             </div>
 
-                            <div className="text-[11px] sm:text-[12px] text-slate-400 font-['Inter'] mb-2.5">
+                            <div className="text-[13px] lg:text-[12px] text-slate-400 font-['Inter'] mb-2.5">
                               <span className="truncate block max-w-full text-slate-400/90">{lead.address}</span>
                             </div>
 
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="inline-flex items-center gap-1 font-['JetBrains_Mono'] text-[9.5px] font-medium text-slate-300 bg-[#171c2b] border border-[#272e42] px-2 py-0.5 rounded-full shrink-0">
+                              <span className="inline-flex items-center gap-1 font-['JetBrains_Mono'] text-[11px] lg:text-[9.5px] font-medium text-slate-300 bg-[#171c2b] border border-[#272e42] px-2 py-0.5 rounded-full shrink-0">
                                 {lead.conversationTag.icon === 'photos' ? (
-                                  <Paperclip className="w-2.5 h-2.5 text-slate-400" />
+                                  <Paperclip className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-slate-400" />
                                 ) : (
-                                  <Calendar className="w-2.5 h-2.5 text-slate-400" />
+                                  <Calendar className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-slate-400" />
                                 )}
                                 {lead.conversationTag.label}
                               </span>
                               {lead.secondaryTag && (
-                                <span className="inline-flex items-center gap-1 font-['JetBrains_Mono'] text-[9px] font-medium text-slate-400 bg-[#141926] border border-[#242b3d] px-1.5 py-0.5 rounded-full shrink-0">
-                                  <Paperclip className="w-2 h-2 text-slate-400" />
+                                <span className="inline-flex items-center gap-1 font-['JetBrains_Mono'] text-[11px] lg:text-[9px] font-medium text-slate-400 bg-[#141926] border border-[#242b3d] px-1.5 py-0.5 rounded-full shrink-0">
+                                  <Paperclip className="w-3 h-3 lg:w-2 lg:h-2 text-slate-400" />
                                   {lead.secondaryTag.label}
                                 </span>
                               )}
-                                {lead.status !== 'booked' && (
+                              {lead.status !== 'booked' && (
                                 <span
-                                  className={`inline-flex items-center font-['JetBrains_Mono'] text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0 border ${
+                                  className={`inline-flex items-center font-['JetBrains_Mono'] text-[11px] lg:text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0 border ${
                                     lead.status === 'won'
                                       ? 'text-[#ffc174] bg-[#ffc174]/10 border-[#ffc174]/30'
                                       : 'text-slate-300 bg-[#141a29]/80 border-white/[0.09]'
@@ -360,7 +366,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                           </div>
 
                           <div className="shrink-0 pl-1.5 flex items-center justify-center text-slate-500 group-hover:text-[#ffc174] transition-colors">
-                            <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-[#ffc174] group-hover:translate-x-0.5 transition-all" />
+                            <ChevronRight className="w-5 h-5 lg:w-4 lg:h-4 text-slate-500 group-hover:text-[#ffc174] group-hover:translate-x-0.5 transition-all" />
                           </div>
                         </div>
                       </div>
@@ -369,49 +375,75 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                 </div>
 
                 {/* Right column: thread */}
-                <div
-                  className={`lg:col-span-7 flex flex-col justify-start min-h-0 ${
-                    mobileView === 'list' ? 'hidden lg:flex' : 'flex'
-                  }`}
-                >
+                <div className={`lg:col-span-7 flex flex-col justify-start min-h-0 ${mobileView === 'list' ? 'hidden lg:flex' : 'flex'}`}>
                   {selectedLead ? (
                     <div className="w-full">
-                      <div className="pb-4 mb-5 border-b border-[#252939] space-y-2.5">
-                        <div className="lg:hidden">
-                          <button
-                            type="button"
-                            onClick={handleBackToQueue}
-                            className="inline-flex items-center gap-1.5 text-xs sm:text-[13px] font-['Space_Grotesk'] font-bold text-slate-300 hover:text-[#ffc174] transition-colors py-0.5 cursor-pointer"
-                            aria-label="Back to queue"
-                          >
-                            <ChevronLeft className="w-4 h-4 text-[#ffc174]" />
-                            <span>Back</span>
-                          </button>
-                        </div>
+                      {/* phones: a slim sticky bar with Back and the name */}
+                      <div className="lg:hidden sticky top-0 z-30 -mx-4 px-4 sm:-mx-7 sm:px-7 py-1 bg-[#0c101d]/95 backdrop-blur border-b border-[#1b2336] flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleBackToQueue}
+                          aria-label="Back to queue"
+                          className="inline-flex items-center gap-1 -ml-2 pl-1 pr-3 py-3 text-sm font-['Space_Grotesk'] font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer shrink-0"
+                        >
+                          <ChevronLeft className="w-5 h-5 text-[#ffc174]" />
+                          <span>Back</span>
+                        </button>
+                        <span className="font-['Space_Grotesk'] text-base font-bold text-slate-100 tracking-tight truncate min-w-0">
+                          {selectedLead.name}
+                        </span>
+                        {selectedLead.priority && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-[#141a29]/80 border border-white/[0.09] text-[9px] font-['JetBrains_Mono'] uppercase tracking-wider text-[#ffc174] font-semibold shrink-0">
+                            PRIORITY
+                          </span>
+                        )}
+                      </div>
 
-                        <div className="space-y-1.5 pt-0.5">
-                          <div className="flex items-center gap-2.5 flex-wrap">
-                            <h3 className="font-['Space_Grotesk'] text-lg sm:text-xl font-bold text-slate-100 tracking-tight">
+                      <div className="pt-4 lg:pt-0 pb-4 mb-5 border-b border-[#252939]">
+                        <div className="space-y-2 pt-0.5">
+                          {/* desktop: name and tag */}
+                          <div className="hidden lg:flex items-center gap-2.5 flex-wrap">
+                            <h3 className="font-['Space_Grotesk'] text-xl font-bold text-slate-100 tracking-tight">
                               {selectedLead.name}
                             </h3>
                             {selectedLead.priority && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#141a29]/80 border border-white/[0.09] text-[9.5px] sm:text-[10px] font-['JetBrains_Mono'] uppercase tracking-wider text-[#ffc174] font-semibold shrink-0 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#141a29]/80 border border-white/[0.09] text-[10px] font-['JetBrains_Mono'] uppercase tracking-wider text-[#ffc174] font-semibold shrink-0 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
                                 HIGH PRIORITY
                               </span>
                             )}
                           </div>
 
-                          <div className="flex flex-wrap items-center text-xs sm:text-[13px] text-slate-300 font-['Inter'] leading-relaxed">
-                            <span className="font-['JetBrains_Mono'] text-slate-200 font-medium">{selectedLead.phone}</span>
+                          <div className="flex flex-wrap items-center text-sm lg:text-[13px] text-slate-300 font-['Inter'] leading-relaxed">
+                            {selectedLead.phone ? (
+                              <a
+                                href={telHref(selectedLead.phone)}
+                                className="inline-block py-1 font-['JetBrains_Mono'] text-slate-100 lg:text-slate-200 font-medium underline decoration-[#ffc174]/40 underline-offset-4 lg:no-underline"
+                              >
+                                {selectedLead.phone}
+                              </a>
+                            ) : (
+                              <span className="text-slate-500">No phone</span>
+                            )}
                             <span className="inline-block w-1 h-1 rounded-full bg-slate-500 mx-2 shrink-0" aria-hidden="true" />
                             <span className="text-slate-300 font-medium">{selectedLead.insurance}</span>
                             <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-500 mx-2 shrink-0" aria-hidden="true" />
-                            <span className="text-slate-400 block sm:inline w-full sm:w-auto mt-0.5 sm:mt-0">{selectedLead.address}</span>
+                            {hasAddress ? (
+                              <a
+                                href={mapsHref(selectedLead.address)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block sm:inline w-full sm:w-auto py-1 sm:py-0 text-slate-300 lg:text-slate-400 underline decoration-[#ffc174]/40 underline-offset-4 lg:no-underline"
+                              >
+                                {selectedLead.address}
+                              </a>
+                            ) : (
+                              <span className="text-slate-500 block sm:inline w-full sm:w-auto">{selectedLead.address}</span>
+                            )}
                           </div>
 
-                                                    <div className="flex flex-col items-start gap-2 pt-0.5 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex flex-col items-start gap-2 pt-0.5 sm:flex-row sm:items-center sm:justify-between">
                             {selectedLead.scheduledTime ? (
-                              <div className="text-xs sm:text-[13px] text-[#ffc174] font-medium font-['JetBrains_Mono']">
+                              <div className="text-sm lg:text-[13px] text-[#ffc174] font-medium font-['JetBrains_Mono']">
                                 {selectedLead.scheduledTime}
                               </div>
                             ) : (
@@ -431,36 +463,34 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                         </div>
                       </div>
 
-                      <div className="space-y-2.5 sm:space-y-3.5 max-h-[335px] sm:max-h-[350px] lg:max-h-[380px] overflow-y-auto pr-1 sm:pr-2 pb-3 sm:pb-4 lg:pb-5">
+                      {/* messages: page scroll on phones, a scroll box only on desktop */}
+                      <div className="space-y-3 lg:space-y-3.5 lg:max-h-[380px] lg:overflow-y-auto lg:pr-2 pb-6 lg:pb-5">
                         {selectedLead.missedCallTime && (
                           <div className="flex items-center justify-center pt-0.5 pb-1">
-                            <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-0.5 sm:py-1 rounded-full bg-[#0a0e19] border border-[#232a3f] text-[11px] sm:text-xs font-['JetBrains_Mono'] text-slate-400">
-                              <PhoneMissed className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400" />
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0a0e19] border border-[#232a3f] text-xs font-['JetBrains_Mono'] text-slate-400">
+                              <PhoneMissed className="w-3.5 h-3.5 text-slate-400" />
                               <span>Missed call · {selectedLead.missedCallTime}</span>
                             </div>
                           </div>
                         )}
 
                         {selectedLead.chatTranscript.length === 0 && (
-                          <p className="text-center font-['JetBrains_Mono'] text-xs text-slate-500 py-6">
-                            Loading messages…
-                          </p>
+                          <p className="text-center font-['JetBrains_Mono'] text-xs text-slate-500 py-6">Loading messages…</p>
                         )}
 
                         {selectedLead.chatTranscript.map((msg, index) => {
-                          const isWedge = msg.sender === 'wedge';
-                                                    if (msg.kind === 'event') {
+                          if (msg.kind === 'event') {
                             return (
                               <React.Fragment key={index}>
                                 {msg.dayDivider && (
                                   <div className="flex items-center justify-center my-3">
-                                    <span className="font-['JetBrains_Mono'] text-[9.5px] sm:text-[10px] uppercase tracking-widest text-slate-400 bg-[#0a0e19] border border-[#232a3f] px-3 py-0.5 rounded-full font-semibold">
+                                    <span className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-400 bg-[#0a0e19] border border-[#232a3f] px-3 py-0.5 rounded-full font-semibold">
                                       {msg.dayDivider}
                                     </span>
                                   </div>
                                 )}
                                 <div className="flex items-center justify-center py-0.5">
-                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#0a0e19] border border-[#232a3f] text-[10.5px] sm:text-[11px] font-['JetBrains_Mono'] text-slate-500 text-center leading-snug">
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#0a0e19] border border-[#232a3f] text-[11px] font-['JetBrains_Mono'] text-slate-500 text-center leading-snug">
                                     <span
                                       className={`h-1 w-1 rounded-full shrink-0 ${
                                         msg.eventActor === 'system' ? 'bg-slate-500' : 'bg-[#ffc174]'
@@ -475,36 +505,36 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                               </React.Fragment>
                             );
                           }
+
+                          const isWedge = msg.sender === 'wedge';
                           return (
                             <React.Fragment key={index}>
                               {msg.dayDivider && (
                                 <div className="flex items-center justify-center my-3">
-                                  <span className="font-['JetBrains_Mono'] text-[9.5px] sm:text-[10px] uppercase tracking-widest text-slate-400 bg-[#0a0e19] border border-[#232a3f] px-3 py-0.5 rounded-full font-semibold">
+                                  <span className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-400 bg-[#0a0e19] border border-[#232a3f] px-3 py-0.5 rounded-full font-semibold">
                                     {msg.dayDivider}
                                   </span>
                                 </div>
                               )}
                               <div
-                                className={`p-3 sm:p-4 text-xs sm:text-[13.5px] leading-relaxed transition-all shadow-md ${
+                                className={`p-3.5 lg:p-4 leading-relaxed transition-all shadow-md ${
                                   isWedge
-                                    ? 'rounded-2xl rounded-tl-sm bg-[#111625] text-[#dee1f7] border border-[#252939] max-w-[95%] sm:max-w-[92%]'
-                                    : 'rounded-2xl rounded-tr-sm bg-[#ffc174]/[0.09] text-slate-100 ml-auto text-left border border-[#ffc174]/20 max-w-[95%] sm:max-w-[92%] shadow-sm'
+                                    ? 'rounded-2xl rounded-tl-sm bg-[#111625] text-[#dee1f7] border border-[#252939] max-w-[88%] lg:max-w-[92%]'
+                                    : 'rounded-2xl rounded-tr-sm bg-[#ffc174]/[0.09] text-slate-100 ml-auto text-left border border-[#ffc174]/20 max-w-[88%] lg:max-w-[92%] shadow-sm'
                                 }`}
                               >
-                                <div className="flex items-center justify-between gap-2 sm:gap-3 mb-1 sm:mb-1.5 pb-1 border-b border-[#252b3d]/40">
+                                <div className="flex items-center justify-between gap-3 mb-1.5 pb-1 border-b border-[#252b3d]/40">
                                   <span
-                                    className={`font-['JetBrains_Mono'] text-[11px] sm:text-xs font-bold uppercase tracking-wider ${
+                                    className={`font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-wider ${
                                       isWedge ? 'text-slate-400 font-medium' : 'text-[#ffc174] font-semibold'
                                     }`}
                                   >
                                     {isWedge ? companyName : selectedLead.name.split(' ')[0]}
                                   </span>
-                                  <span className="font-['JetBrains_Mono'] text-[10px] sm:text-[11px] text-slate-500">
-                                    {msg.time}
-                                  </span>
+                                  <span className="font-['JetBrains_Mono'] text-[11px] text-slate-500">{msg.time}</span>
                                 </div>
 
-                                <p className="font-['Inter'] text-xs sm:text-[13.5px] leading-relaxed text-[#e2e8f0] break-words">
+                                <p className="font-['Inter'] text-[15px] lg:text-[13.5px] leading-relaxed text-[#e2e8f0] break-words">
                                   {msg.text}
                                 </p>
 
@@ -515,12 +545,12 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                                         key={i}
                                         className="flex items-center gap-2 p-2 rounded-lg bg-[#090d18] border border-[#262c3e] hover:border-[#f59e0b]/40 transition-colors select-none"
                                       >
-                                        <div className="w-6 h-6 rounded-md bg-[#192236] border border-[#2b354d] flex items-center justify-center text-white shrink-0">
-                                          <ImageIcon className="w-3 h-3 text-white" />
+                                        <div className="w-7 h-7 lg:w-6 lg:h-6 rounded-md bg-[#192236] border border-[#2b354d] flex items-center justify-center text-white shrink-0">
+                                          <ImageIcon className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-white" />
                                         </div>
-                                        <div className="min-w-0 flex-1 font-['JetBrains_Mono'] text-[10px] leading-tight">
+                                        <div className="min-w-0 flex-1 font-['JetBrains_Mono'] text-[11px] lg:text-[10px] leading-tight">
                                           <span className="block text-slate-200 font-medium truncate">{att.name}</span>
-                                          <span className="text-slate-500 text-[9px]">{att.size}</span>
+                                          <span className="text-slate-500 text-[10px] lg:text-[9px]">{att.size}</span>
                                         </div>
                                       </div>
                                     ))}
@@ -530,7 +560,14 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                             </React.Fragment>
                           );
                         })}
+                        <div ref={endRef} className="scroll-mb-24" />
                       </div>
+
+                      {threadFooter && (
+                        <div className="sticky bottom-0 z-20 -mx-4 px-4 sm:-mx-7 sm:px-7 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-[#0c101d]/95 backdrop-blur border-t border-[#1b2336] lg:static lg:mx-0 lg:px-0 lg:pb-0 lg:pt-4 lg:bg-transparent lg:backdrop-blur-none">
+                          {threadFooter}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="w-full h-full min-h-[360px] flex flex-col items-center justify-center text-center p-8 rounded-xl border border-dashed border-[#232839] bg-[#0c101d]/60">

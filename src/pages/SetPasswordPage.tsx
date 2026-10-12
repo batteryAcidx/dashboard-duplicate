@@ -340,7 +340,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="w-full pl-11 pr-11 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-xs sm:text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 transition-colors"
+                    className="w-full pl-11 pr-11 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-base sm:text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 transition-colors"
                   />
                   <button
                     type="button"

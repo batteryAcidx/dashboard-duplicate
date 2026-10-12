@@ -28,6 +28,14 @@ function formatPhone(e164: string | null): string {
 
 const hhmm = (t: string | null | undefined, fallback: string) => (t || fallback).slice(0, 5);
 
+const to12h = (t: string) => {
+  const [h, m] = t.split(':').map(Number);
+  if (Number.isNaN(h)) return t;
+  const ap = h >= 12 ? 'PM' : 'AM';
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return m ? `${hh}:${String(m).padStart(2, '0')} ${ap}` : `${hh} ${ap}`;
+};
+
 interface SaveState {
   saving: boolean;
   error: string | null;
@@ -45,16 +53,62 @@ function useSave() {
   return [state, run] as const;
 }
 
+// 16px text on purpose: iPhones zoom the page when an input is smaller
 const inputCls =
-  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg px-3 py-2.5 text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 disabled:opacity-60";
+  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-xl px-4 py-3 text-base font-['Inter'] text-slate-100 placeholder:text-slate-600 disabled:opacity-60";
 
-/* ---------- small building blocks ---------- */
+/* ---------- building blocks ---------- */
 
-const Card: React.FC<{ title: string; hint?: string; children: React.ReactNode }> = ({ title, hint, children }) => (
-  <section className="p-5 sm:p-6 rounded-xl bg-[#111625] border border-[#22283a]">
-    <h2 className="font-['Space_Grotesk'] text-base sm:text-lg font-bold text-slate-100 tracking-tight">{title}</h2>
-    {hint && <p className="mt-1 text-xs sm:text-[13px] text-slate-400 leading-relaxed">{hint}</p>}
-    <div className="mt-4 space-y-4">{children}</div>
+const Group: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div>
+    <div className="mb-3 font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-500 font-semibold">
+      {label}
+    </div>
+    <div className="space-y-3">{children}</div>
+  </div>
+);
+
+interface SectionProps {
+  id: string;
+  title: string;
+  summary: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}
+
+const Section: React.FC<SectionProps> = ({ id, title, summary, open, onToggle, children }) => (
+  <section
+    className={`rounded-xl border bg-[#111625] transition-colors ${
+      open ? 'border-[#f59e0b]/40' : 'border-[#22283a]'
+    }`}
+  >
+    <h2>
+      <button
+        type="button"
+        id={`${id}-header`}
+        aria-expanded={open}
+        aria-controls={`${id}-panel`}
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left cursor-pointer min-h-[64px]"
+      >
+        <span className="min-w-0">
+          <span className="block font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight">{title}</span>
+          {!open && summary && <span className="block mt-0.5 text-sm text-slate-400 truncate">{summary}</span>}
+        </span>
+        <ChevronDown className={`w-5 h-5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+    </h2>
+    {open && (
+      <div
+        id={`${id}-panel`}
+        role="region"
+        aria-labelledby={`${id}-header`}
+        className="px-5 pb-5 pt-5 space-y-5 border-t border-[#1b2336]"
+      >
+        {children}
+      </div>
+    )}
   </section>
 );
 
@@ -64,24 +118,24 @@ const Field: React.FC<{ id: string; label: string; hint?: string; children: Reac
   hint,
   children,
 }) => (
-  <div className="space-y-1.5">
+  <div className="space-y-2">
     <label
       htmlFor={id}
-      className="block font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-slate-400 font-semibold"
+      className="block font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-400 font-semibold"
     >
       {label}
     </label>
     {children}
-    {hint && <p className="text-[11.5px] text-slate-500 leading-relaxed">{hint}</p>}
+    {hint && <p className="text-[13px] text-slate-400 leading-relaxed">{hint}</p>}
   </div>
 );
 
 const ReadRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="flex items-start justify-between gap-4 text-sm">
-    <span className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-slate-500 font-semibold pt-0.5">
+  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-0.5 sm:gap-4">
+    <span className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-500 font-semibold sm:pt-0.5 shrink-0">
       {label}
     </span>
-    <span className="text-slate-200 text-right break-words min-w-0">{value || '—'}</span>
+    <span className="text-base text-slate-100 sm:text-right break-words min-w-0">{value || '—'}</span>
   </div>
 );
 
@@ -90,25 +144,58 @@ const SaveRow: React.FC<{ state: SaveState; onSave: () => void; label?: string }
   onSave,
   label = 'Save changes',
 }) => (
-  <div className="pt-1 flex items-center gap-3 flex-wrap">
+  <div className="pt-1 space-y-3">
     <button
       type="button"
       onClick={onSave}
       disabled={state.saving}
-      className="px-4 py-2 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50"
+      className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-['Space_Grotesk'] font-bold text-sm uppercase tracking-wider cursor-pointer disabled:opacity-50"
     >
       {state.saving ? 'Saving…' : label}
     </button>
-    {state.saved && <span className="font-['JetBrains_Mono'] text-xs text-[#ffc174]">Saved</span>}
+    {state.saved && (
+      <p role="status" className="font-['JetBrains_Mono'] text-sm text-[#ffc174]">
+        Saved
+      </p>
+    )}
     {state.error && (
-      <span role="alert" className="text-xs text-red-400 font-['Inter']">
+      <p role="alert" className="text-sm text-red-400 font-['Inter'] leading-relaxed">
         {state.error}
-      </span>
+      </p>
     )}
   </div>
 );
 
+const CheckRow: React.FC<{ checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }> = ({
+  checked,
+  onChange,
+  children,
+}) => (
+  <label className="flex items-center gap-3 cursor-pointer text-base text-slate-200 py-1.5">
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={(e) => onChange(e.target.checked)}
+      className="h-5 w-5 accent-[#f59e0b] shrink-0"
+    />
+    <span>{children}</span>
+  </label>
+);
+
 /* ---------- the page ---------- */
+
+interface Snap {
+  phone: string;
+  quietOn: boolean;
+  quietStart: string;
+  quietEnd: string;
+  serviceArea: string;
+  officeOpen: string;
+  officeClose: string;
+  weekends: boolean;
+  jobCount: number;
+  fullName: string;
+}
 
 interface SettingsPageProps {
   onNavigate?: (path: string) => void;
@@ -144,12 +231,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
   const [jobInputs, setJobInputs] = useState<Record<string, string>>({});
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [pwChangedAt, setPwChangedAt] = useState<string | null>(null);
+
+  // what is actually saved (the collapsed summaries read this, not the unsaved fields)
+  const [snap, setSnap] = useState<Snap | null>(null);
 
   const [profileState, runProfile] = useSave();
   const [notifyState, runNotify] = useSave();
   const [businessState, runBusiness] = useSave();
   const [jobsState, runJobs] = useSave();
   const [passwordState, runPassword] = useSave();
+
+  const [open, setOpen] = useState<string | null>(null);
+  const toggle = (key: string) => setOpen((o) => (o === key ? null : key));
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -193,7 +288,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
           'id, name, territory, timezone, service_area, services, office_open, office_close, works_weekends, notification_phone, quiet_start, quiet_end'
         )
         .maybeSingle(),
-      supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle(),
+      supabase.from('profiles').select('full_name, password_changed_at').eq('id', user.id).maybeSingle(),
       supabase.from('job_values').select('job_type, typical_value'),
       supabase.from('setup_steps').select('status').eq('step_key', 'calendar_connected').maybeSingle(),
     ]);
@@ -205,20 +300,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     }
 
     const a = acc.data;
+    const phone = formatPhone(a.notification_phone);
+    const qOn = Boolean(a.quiet_start && a.quiet_end);
+    const qStart = hhmm(a.quiet_start, '22:00');
+    const qEnd = hhmm(a.quiet_end, '07:00');
+    const oOpen = hhmm(a.office_open, '08:00');
+    const oClose = hhmm(a.office_close, '17:00');
+
     setAccountId(a.id);
     setCompanyName(a.name || '');
     setTerritory(a.territory || '');
     setTz(a.timezone || '');
     setServiceArea(a.service_area || '');
     setServices(a.services || '');
-    setOfficeOpen(hhmm(a.office_open, '08:00'));
-    setOfficeClose(hhmm(a.office_close, '17:00'));
+    setOfficeOpen(oOpen);
+    setOfficeClose(oClose);
     setWeekends(Boolean(a.works_weekends));
-    setPhoneText(formatPhone(a.notification_phone));
-    setQuietOn(Boolean(a.quiet_start && a.quiet_end));
-    setQuietStart(hhmm(a.quiet_start, '22:00'));
-    setQuietEnd(hhmm(a.quiet_end, '07:00'));
+    setPhoneText(phone);
+    setQuietOn(qOn);
+    setQuietStart(qStart);
+    setQuietEnd(qEnd);
     setFullName(prof.data?.full_name || '');
+    setPwChangedAt(prof.data?.password_changed_at || null);
     setCalendarStatus(cal.data?.status || null);
 
     const inputs: Record<string, string> = {};
@@ -227,6 +330,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       inputs[r.job_type] = String(Math.round(Number(r.typical_value)));
     });
     setJobInputs(inputs);
+
+    setSnap({
+      phone,
+      quietOn: qOn,
+      quietStart: qStart,
+      quietEnd: qEnd,
+      serviceArea: a.service_area || '',
+      officeOpen: oOpen,
+      officeClose: oClose,
+      weekends: Boolean(a.works_weekends),
+      jobCount: JOB_TYPES.filter((j) => (inputs[j.key] || '').trim()).length,
+      fullName: prof.data?.full_name || '',
+    });
 
     setLoading(false);
   }, [userEmail]);
@@ -254,6 +370,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
         .eq('id', userId)
         .select('id');
       if (error || !data || data.length !== 1) return 'Could not save. Try again.';
+      setSnap((s) => (s ? { ...s, fullName: name } : s));
       return null;
     });
 
@@ -274,7 +391,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
         quiet_start: quietOn ? quietStart : null,
         quiet_end: quietOn ? quietEnd : null,
       });
-      if (!err) setPhoneText(formatPhone(phone));
+      if (!err) {
+        const pretty = formatPhone(phone);
+        setPhoneText(pretty);
+        setSnap((s) => (s ? { ...s, phone: pretty, quietOn, quietStart, quietEnd } : s));
+      }
       return err;
     });
 
@@ -284,13 +405,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       if (services.trim().length > 300) return 'Services is too long (300 characters at most).';
       if (!officeOpen || !officeClose) return 'Choose both office hours times.';
       if (officeClose <= officeOpen) return 'Closing time must be after opening time.';
-      return updateAccount({
+      const err = await updateAccount({
         service_area: serviceArea.trim() || null,
         services: services.trim() || null,
         office_open: officeOpen,
         office_close: officeClose,
         works_weekends: weekends,
       });
+      if (!err) {
+        setSnap((s) =>
+          s ? { ...s, serviceArea: serviceArea.trim(), officeOpen, officeClose, weekends } : s
+        );
+      }
+      return err;
     });
 
   const saveJobValues = () =>
@@ -308,11 +435,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       if (rows.length === 0) return 'Enter at least one value.';
       const { error } = await supabase.from('job_values').upsert(rows, { onConflict: 'account_id,job_type' });
       if (error) return 'Could not save. Check your connection and try again.';
-      setJobInputs((prev) => {
-        const next = { ...prev };
-        rows.forEach((r) => (next[r.job_type] = String(r.typical_value)));
-        return next;
-      });
+
+      const merged = { ...jobInputs };
+      rows.forEach((r) => (merged[r.job_type] = String(r.typical_value)));
+      setJobInputs(merged);
+      setSnap((s) =>
+        s ? { ...s, jobCount: JOB_TYPES.filter((j) => (merged[j.key] || '').trim()).length } : s
+      );
       return null;
     });
 
@@ -340,15 +469,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       }
       setNewPassword('');
       setConfirmPassword('');
+      setShowPw(false);
+      setPwChangedAt(new Date().toISOString());
       return null;
     });
 
-  /* ---------- render ---------- */
+  /* ---------- summaries (saved values only) ---------- */
+
+  const s = snap;
+  const notifySummary = s
+    ? `${s.phone || 'No number yet'} · ${
+        s.quietOn ? `Quiet ${to12h(s.quietStart)} to ${to12h(s.quietEnd)}` : 'No quiet hours'
+      }`
+    : '';
+  const businessSummary = s
+    ? `${s.serviceArea || 'No service area'} · ${to12h(s.officeOpen)} to ${to12h(s.officeClose)}${
+        s.weekends ? ' · weekends' : ''
+      }`
+    : '';
+  const jobSummary = s ? (s.jobCount ? `${s.jobCount} of ${JOB_TYPES.length} values set` : 'Not set yet') : '';
+  const calendarSummary = calendarStatus === 'done' ? 'Connected' : 'Set up during onboarding';
+  const initial = (companyName || loginEmail || 'U').charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-['Inter']">
       {/* compact header */}
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 pt-5 pb-3 flex items-center justify-between gap-4">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 pt-5 pb-3 flex items-center justify-between gap-4">
         <span className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight truncate">
           {companyName}
         </span>
@@ -356,23 +502,37 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#111728] border border-[#212b42] text-slate-300 text-xs"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#111728] border border-[#212b42] text-slate-300 text-xs"
             aria-expanded={menuOpen}
+            aria-label="Account menu"
           >
-            <span className="max-w-[140px] truncate hidden sm:inline">{loginEmail}</span>
+            <span className="w-6 h-6 rounded-full bg-[#1e273d] border border-[#2d3a5a] flex items-center justify-center text-[11px] font-bold text-[#ffc174] shrink-0 sm:hidden">
+              {initial}
+            </span>
+            <span className="max-w-[160px] truncate hidden sm:inline">{loginEmail}</span>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-52 rounded-xl bg-[#0f1422] border border-[#222c42] py-1.5 z-50">
+            <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#0f1422] border border-[#222c42] py-1.5 z-50">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  goto('/queue');
+                }}
+                className="w-full px-4 py-3 text-sm text-slate-300 hover:text-white hover:bg-[#192236] text-left"
+              >
+                Dashboard
+              </button>
               <button
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
                   onSignOut?.();
                 }}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-300 hover:text-red-400 hover:bg-[#192236] text-left"
+                className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-300 hover:text-red-400 hover:bg-[#192236] text-left"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-4 h-4" />
                 Sign out
               </button>
             </div>
@@ -380,11 +540,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
         </div>
       </div>
 
-      <main className="mx-auto max-w-3xl px-4 sm:px-6 pb-20">
+      <main className="mx-auto max-w-5xl px-4 sm:px-6 pb-[max(5rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={() => goto('/queue')}
-          className="inline-flex items-center gap-1.5 mt-4 text-xs font-['Space_Grotesk'] font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 mt-3 -ml-1 pl-1 pr-3 py-2.5 text-sm font-['Space_Grotesk'] font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 text-[#ffc174]" />
           Dashboard
@@ -396,19 +556,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
           </div>
         ) : loadError ? (
           <div className="mx-auto max-w-md py-16 text-center space-y-4">
-            <p className="text-sm text-slate-300">{loadError}</p>
+            <p className="text-base text-slate-300">{loadError}</p>
             <button
               type="button"
               onClick={load}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#f59e0b] text-[#150f05] font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider"
+              className="inline-flex items-center gap-1.5 px-5 py-3 rounded-xl bg-[#f59e0b] text-[#150f05] font-['Space_Grotesk'] font-bold text-sm uppercase tracking-wider cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <RotateCcw className="w-4 h-4" />
               Retry
             </button>
           </div>
         ) : (
           <>
-            <div className="mt-6 mb-6">
+            <div className="mt-5 mb-7">
               <span className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#f59e0b] font-bold block mb-2">
                 ACCOUNT
               </span>
@@ -417,237 +577,294 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
               </h1>
             </div>
 
-            <div className="space-y-5">
-              {/* Account (read-only) */}
-              <Card
-                title="Your account"
-                hint="These are set by us. To change any of them, email contact@wedgescale.com."
-              >
-                <ReadRow label="Company" value={companyName} />
-                <ReadRow label="Territory" value={territory} />
-                <ReadRow label="Time zone" value={tz} />
-                <ReadRow label="Login email" value={loginEmail} />
-              </Card>
-
-              {/* Notifications */}
-              <Card
-                title="Notifications"
-                hint="Where we text you the moment a job books. Quiet hours are applied when texting is connected."
-              >
-                <Field id="notify-phone" label="Your mobile number" hint="US or Canadian number.">
-                  <input
-                    id="notify-phone"
-                    name="tel"
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    value={phoneText}
-                    onChange={(e) => setPhoneText(e.target.value)}
-                    placeholder="(214) 555-0100"
-                    className={inputCls}
-                  />
-                </Field>
-
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2.5 cursor-pointer text-sm text-slate-200">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+              <Group label="Your business">
+                <Section
+                  id="notifications"
+                  title="Notifications"
+                  summary={notifySummary}
+                  open={open === 'notifications'}
+                  onToggle={() => toggle('notifications')}
+                >
+                  <p className="text-[13px] text-slate-400 leading-relaxed">
+                    Where we text you the moment a job books. Saved now, and applied once texting is connected.
+                  </p>
+                  <Field id="notify-phone" label="Your mobile number" hint="US or Canadian number.">
                     <input
-                      type="checkbox"
-                      checked={quietOn}
-                      onChange={(e) => setQuietOn(e.target.checked)}
-                      className="h-4 w-4 accent-[#f59e0b]"
-                    />
-                    Do not text me during quiet hours
-                  </label>
-                  {quietOn && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <Field id="quiet-start" label="From">
-                        <input
-                          id="quiet-start"
-                          type="time"
-                          value={quietStart}
-                          onChange={(e) => setQuietStart(e.target.value)}
-                          style={{ colorScheme: 'dark' }}
-                          className={inputCls}
-                        />
-                      </Field>
-                      <Field id="quiet-end" label="Until">
-                        <input
-                          id="quiet-end"
-                          type="time"
-                          value={quietEnd}
-                          onChange={(e) => setQuietEnd(e.target.value)}
-                          style={{ colorScheme: 'dark' }}
-                          className={inputCls}
-                        />
-                      </Field>
-                    </div>
-                  )}
-                </div>
-                <SaveRow state={notifyState} onSave={saveNotifications} />
-              </Card>
-
-              {/* Business info */}
-              <Card
-                title="Business info"
-                hint="Used when we write your texts, for example how we phrase after-hours messages."
-              >
-                <Field id="service-area" label="Service area" hint="Cities or regions you cover.">
-                  <input
-                    id="service-area"
-                    type="text"
-                    maxLength={200}
-                    value={serviceArea}
-                    onChange={(e) => setServiceArea(e.target.value)}
-                    placeholder="Dallas-Fort Worth"
-                    className={inputCls}
-                  />
-                </Field>
-                <Field id="services" label="Services" hint="What you do, in a few words.">
-                  <textarea
-                    id="services"
-                    rows={2}
-                    maxLength={300}
-                    value={services}
-                    onChange={(e) => setServices(e.target.value)}
-                    placeholder="Storm damage, roof repair, full reroofs, insurance claims"
-                    className={`${inputCls} resize-none`}
-                  />
-                </Field>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field id="office-open" label="Office opens">
-                    <input
-                      id="office-open"
-                      type="time"
-                      value={officeOpen}
-                      onChange={(e) => setOfficeOpen(e.target.value)}
-                      style={{ colorScheme: 'dark' }}
+                      id="notify-phone"
+                      name="tel"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      value={phoneText}
+                      onChange={(e) => setPhoneText(e.target.value)}
+                      placeholder="(214) 555-0100"
                       className={inputCls}
                     />
                   </Field>
-                  <Field id="office-close" label="Office closes">
+                  <div className="space-y-3">
+                    <CheckRow checked={quietOn} onChange={setQuietOn}>
+                      Do not text me during quiet hours
+                    </CheckRow>
+                    {quietOn && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field id="quiet-start" label="From">
+                          <input
+                            id="quiet-start"
+                            type="time"
+                            value={quietStart}
+                            onChange={(e) => setQuietStart(e.target.value)}
+                            style={{ colorScheme: 'dark' }}
+                            className={inputCls}
+                          />
+                        </Field>
+                        <Field id="quiet-end" label="Until">
+                          <input
+                            id="quiet-end"
+                            type="time"
+                            value={quietEnd}
+                            onChange={(e) => setQuietEnd(e.target.value)}
+                            style={{ colorScheme: 'dark' }}
+                            className={inputCls}
+                          />
+                        </Field>
+                      </div>
+                    )}
+                  </div>
+                  <SaveRow state={notifyState} onSave={saveNotifications} />
+                </Section>
+
+                <Section
+                  id="business"
+                  title="Business info"
+                  summary={businessSummary}
+                  open={open === 'business'}
+                  onToggle={() => toggle('business')}
+                >
+                  <p className="text-[13px] text-slate-400 leading-relaxed">
+                    Used when we write your texts, for example how we phrase after-hours messages.
+                  </p>
+                  <Field id="service-area" label="Service area" hint="Cities or regions you cover.">
                     <input
-                      id="office-close"
-                      type="time"
-                      value={officeClose}
-                      onChange={(e) => setOfficeClose(e.target.value)}
-                      style={{ colorScheme: 'dark' }}
+                      id="service-area"
+                      type="text"
+                      maxLength={200}
+                      value={serviceArea}
+                      onChange={(e) => setServiceArea(e.target.value)}
+                      placeholder="Dallas-Fort Worth"
                       className={inputCls}
                     />
                   </Field>
-                </div>
-                <label className="flex items-center gap-2.5 cursor-pointer text-sm text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={weekends}
-                    onChange={(e) => setWeekends(e.target.checked)}
-                    className="h-4 w-4 accent-[#f59e0b]"
-                  />
-                  Office is open on weekends
-                </label>
-                <SaveRow state={businessState} onSave={saveBusiness} />
-              </Card>
+                  <Field id="services" label="Services" hint="What you do, in a few words.">
+                    <textarea
+                      id="services"
+                      rows={3}
+                      maxLength={300}
+                      value={services}
+                      onChange={(e) => setServices(e.target.value)}
+                      placeholder="Storm damage, roof repair, full reroofs, insurance claims"
+                      className={`${inputCls} resize-none`}
+                    />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field id="office-open" label="Office opens">
+                      <input
+                        id="office-open"
+                        type="time"
+                        value={officeOpen}
+                        onChange={(e) => setOfficeOpen(e.target.value)}
+                        style={{ colorScheme: 'dark' }}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field id="office-close" label="Office closes">
+                      <input
+                        id="office-close"
+                        type="time"
+                        value={officeClose}
+                        onChange={(e) => setOfficeClose(e.target.value)}
+                        style={{ colorScheme: 'dark' }}
+                        className={inputCls}
+                      />
+                    </Field>
+                  </div>
+                  <CheckRow checked={weekends} onChange={setWeekends}>
+                    Office is open on weekends
+                  </CheckRow>
+                  <SaveRow state={businessState} onSave={saveBusiness} />
+                </Section>
 
-              {/* Job values */}
-              <Card
-                title="Typical job values"
-                hint="What a typical job is worth to you. Until you have seen a job in person, we use these to estimate your pipeline. Leave a row blank to keep its current value."
-              >
-                <div className="space-y-3">
+                <Section
+                  id="jobvalues"
+                  title="Typical job values"
+                  summary={jobSummary}
+                  open={open === 'jobvalues'}
+                  onToggle={() => toggle('jobvalues')}
+                >
+                  <p className="text-[13px] text-slate-400 leading-relaxed">
+                    What a typical job is worth to you. Until you have seen a job in person, we use these to estimate
+                    your pipeline. Leave a row blank to keep its current value.
+                  </p>
                   {JOB_TYPES.map((j) => (
                     <Field key={j.key} id={`jv-${j.key}`} label={j.label} hint={j.hint}>
-                      <div className="flex items-center gap-2">
-                        <span className="font-['JetBrains_Mono'] text-sm text-slate-400">$</span>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-['JetBrains_Mono'] text-base text-slate-400 pointer-events-none">
+                          $
+                        </span>
                         <input
                           id={`jv-${j.key}`}
                           type="text"
-                          inputMode="decimal"
+                          inputMode="numeric"
                           value={jobInputs[j.key] || ''}
                           onChange={(e) => setJobInputs((prev) => ({ ...prev, [j.key]: e.target.value }))}
                           placeholder="9500"
-                          className={inputCls}
+                          className={`${inputCls} pl-9`}
                         />
                       </div>
                     </Field>
                   ))}
-                </div>
-                <SaveRow state={jobsState} onSave={saveJobValues} />
-              </Card>
+                  <SaveRow state={jobsState} onSave={saveJobValues} />
+                </Section>
 
-              {/* Calendar */}
-              <Card title="Calendar">
-                <p className="text-sm text-slate-300 leading-relaxed">
-                  {calendarStatus === 'done'
-                    ? 'Connected. Booked inspections land on your calendar.'
-                    : 'We connect your calendar during setup.'}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => goto('/setup')}
-                  className="font-['JetBrains_Mono'] text-xs text-slate-400 hover:text-[#ffc174] transition-colors uppercase tracking-[0.16em] cursor-pointer"
+                <Section
+                  id="calendar"
+                  title="Calendar"
+                  summary={calendarSummary}
+                  open={open === 'calendar'}
+                  onToggle={() => toggle('calendar')}
                 >
-                  See setup progress
-                </button>
-              </Card>
+                  <p className="text-base text-slate-300 leading-relaxed">
+                    {calendarStatus === 'done'
+                      ? 'Connected. Booked inspections land on your calendar.'
+                      : 'We connect your calendar during setup.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => goto('/setup')}
+                    className="px-5 py-3 rounded-xl bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-200 font-['Space_Grotesk'] font-bold text-sm uppercase tracking-wider cursor-pointer w-full sm:w-auto"
+                  >
+                    See setup progress
+                  </button>
+                </Section>
+              </Group>
 
-              {/* Profile */}
-              <Card title="Your name">
-                <Field id="full-name" label="Full name">
-                  <input
-                    id="full-name"
-                    name="name"
-                    type="text"
-                    autoComplete="name"
-                    maxLength={80}
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className={inputCls}
-                  />
-                </Field>
-                <SaveRow state={profileState} onSave={saveProfile} />
-              </Card>
-
-              {/* Password */}
-              <Card title="Change password">
-                <Field id="new-password" label="New password">
-                  <input
-                    id="new-password"
-                    name="new-password"
-                    type="password"
-                    autoComplete="new-password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className={inputCls}
-                  />
-                </Field>
-                <Field
-                  id="confirm-password"
-                  label="Confirm password"
-                  hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+              <Group label="Your account">
+                <Section
+                  id="account"
+                  title="Account details"
+                  summary={companyName}
+                  open={open === 'account'}
+                  onToggle={() => toggle('account')}
                 >
-                  <input
+                  <p className="text-[13px] text-slate-400 leading-relaxed">
+                    These are set by us. To change any of them, email{' '}
+                    <a href="mailto:contact@wedgescale.com" className="text-[#ffc174] underline underline-offset-2">
+                      contact@wedgescale.com
+                    </a>
+                    .
+                  </p>
+                  <ReadRow label="Company" value={companyName} />
+                  <ReadRow label="Territory" value={territory || 'Not assigned yet'} />
+                  <ReadRow label="Time zone" value={tz} />
+                  <ReadRow label="Login email" value={loginEmail} />
+                </Section>
+
+                <Section
+                  id="name"
+                  title="Your name"
+                  summary={s?.fullName || 'Not set'}
+                  open={open === 'name'}
+                  onToggle={() => toggle('name')}
+                >
+                  <Field id="full-name" label="Full name">
+                    <input
+                      id="full-name"
+                      name="name"
+                      type="text"
+                      autoComplete="name"
+                      maxLength={80}
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <SaveRow state={profileState} onSave={saveProfile} />
+                </Section>
+
+                <Section
+                  id="password"
+                  title="Change password"
+                  summary={
+                    pwChangedAt
+                      ? `Changed ${new Date(pwChangedAt).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          timeZone: tz || undefined,
+                        })}`
+                      : 'Not recorded yet'
+                  }
+                  open={open === 'password'}
+                  onToggle={() => toggle('password')}
+                >
+                  <Field id="new-password" label="New password">
+                    <input
+                      id="new-password"
+                      name="new-password"
+                      type={showPw ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field
                     id="confirm-password"
-                    name="confirm-password"
-                    type="password"
-                    autoComplete="new-password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className={inputCls}
-                  />
-                </Field>
-                <SaveRow state={passwordState} onSave={changePassword} label="Change password" />
-              </Card>
+                    label="Confirm password"
+                    hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+                  >
+                    <input
+                      id="confirm-password"
+                      name="confirm-password"
+                      type={showPw ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <CheckRow checked={showPw} onChange={setShowPw}>
+                    Show passwords
+                  </CheckRow>
+                  <SaveRow state={passwordState} onSave={changePassword} label="Change password" />
+                </Section>
 
-              {/* Billing */}
-              <Card title="Billing">
-                <p className="text-sm text-slate-300 leading-relaxed">
-                  For invoices, plan changes or any billing question, email{' '}
-                  <a href="mailto:contact@wedgescale.com" className="text-[#ffc174] hover:underline">
-                    contact@wedgescale.com
-                  </a>
-                  .
-                </p>
-              </Card>
+                <Section
+                  id="billing"
+                  title="Billing"
+                  summary="Invoices and plan changes"
+                  open={open === 'billing'}
+                  onToggle={() => toggle('billing')}
+                >
+                  <p className="text-base text-slate-300 leading-relaxed">
+                    For invoices, plan changes or any billing question, email{' '}
+                    <a href="mailto:contact@wedgescale.com" className="text-[#ffc174] underline underline-offset-2">
+                      contact@wedgescale.com
+                    </a>
+                    .
+                  </p>
+                </Section>
+              </Group>
             </div>
+
+            <button
+              type="button"
+              onClick={() => onSignOut?.()}
+              className="sm:hidden mt-8 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl border border-[#222c42] text-slate-300 text-sm font-['Space_Grotesk'] font-bold uppercase tracking-wider cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign out
+            </button>
           </>
         )}
       </main>

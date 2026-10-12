@@ -128,7 +128,7 @@ export const LeadStatusControl: React.FC<Props> = ({
           {/* bottom sheet on phones, dropdown on larger screens */}
           <div
             role="menu"
-            className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[#222c42] bg-[#0f1422] p-2 pb-6 shadow-[0_-12px_32px_rgba(0,0,0,0.6)] sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-full sm:mt-2 sm:w-64 sm:rounded-xl sm:border sm:p-1.5 sm:pb-1.5 sm:shadow-[0_12px_32px_rgba(0,0,0,0.65)]"
+            className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[#222c42] bg-[#0f1422] p-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-full sm:mt-2 sm:w-64 sm:rounded-xl sm:border sm:p-1.5 sm:pb-1.5 sm:shadow-[0_12px_32px_rgba(0,0,0,0.65)]"
           >
             {view === 'list' ? (
               <>
@@ -193,7 +193,7 @@ export const LeadStatusControl: React.FC<Props> = ({
                       if (e.key === 'Enter') handleSaveValue();
                     }}
                     placeholder="12500"
-                    className="flex-1 min-w-0 bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg px-3 py-2 text-sm font-['JetBrains_Mono'] text-slate-100 placeholder:text-slate-600"
+                    className="flex-1 min-w-0 bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg x-3 py-2 text-base sm:text-sm font-['JetBrains_Mono'] text-slate-100 placeholder:text-slate-600"
                   />
                 </div>
                 {error && (
