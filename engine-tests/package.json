@@ -1,0 +1,7 @@
+{
+  "name": "engine-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "tsx --test engine.test.ts" },
+  "devDependencies": { "tsx": "^4.19.0" }
+}
