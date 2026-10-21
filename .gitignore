@@ -106,3 +106,5 @@ notes-private/
 #   .env.example: the blank template that lists the variable names
 #   supabase/sql/*.sql and supabase/functions/**: your database history and Edge Function code
 # ============================================================================
+# Only bun.lock is committed at the root (Vercel installs with Bun). npm creates this file locally.
+/package-lock.json
