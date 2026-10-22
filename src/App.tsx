@@ -5,6 +5,7 @@ import { SetPasswordPage } from './pages/SetPasswordPage';
 import { QueuePage } from './pages/QueuePage';
 import { SetupPage } from './pages/SetupPage'; // SETUP
 import { SettingsPage } from './pages/SettingsPage'; // SETTINGS
+import { ContactsPage } from './pages/ContactsPage'; // CONTACTS
 import { AdminPage } from './pages/AdminPage'; // ADMIN
 import { NotFoundPage } from './pages/NotFoundPage';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
@@ -167,6 +168,7 @@ export default function App() {
   const isDirect404Preview = currentPath === '/404' || currentPath === '/not-found';
   const isQueuePage = currentPath === '/queue' || currentPath === '/dashboard';
   const isSetupPage = currentPath === '/setup' || currentPath === '/settings'; // SETUP and SETTINGS
+  const isContactsPage = currentPath === '/contacts'; // CONTACTS
   const isAdminRoute = currentPath === '/admin' || currentPath.startsWith('/admin/'); // ADMIN
   const adminAccountId = currentPath.startsWith('/admin/') ? currentPath.slice('/admin/'.length).split('/')[0] : null; // ADMIN
   const isConversationsRoute = currentPath.startsWith('/conversations/');
@@ -188,7 +190,7 @@ export default function App() {
   }
 
   // Rule 2: Protect /queue, /setup and /conversations/:id: if user is signed out, redirect to /login
-  if (!isAuthenticated && (isQueuePage || isConversationsRoute || isSetupPage || isAdminRoute)) { // SETUP
+  if (!isAuthenticated && (isQueuePage || isConversationsRoute || isSetupPage || isContactsPage || isAdminRoute)) { // SETUP
     window.history.replaceState({}, '', '/login');
     return (
       <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
@@ -208,7 +210,7 @@ export default function App() {
   }
 
   // Rule 4: Unknown route and signed out: redirect to /login
-    if (!isAuthenticated && !isKnownPublicRoute && !isQueuePage && !isConversationsRoute && !isSetupPage && !isAdminRoute) { // SETUP
+    if (!isAuthenticated && !isKnownPublicRoute && !isQueuePage && !isConversationsRoute && !isSetupPage && !isContactsPage && !isAdminRoute) { // SETUP
     window.history.replaceState({}, '', '/login');
     return (
       <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
@@ -227,6 +229,12 @@ export default function App() {
             ) : isAdminRoute ? ( // ADMIN
         isAuthenticated ? (
           <AdminPage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} accountId={adminAccountId} />
+        ) : (
+          <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
+        )
+      ) : isContactsPage ? ( // CONTACTS
+        isAuthenticated ? (
+          <ContactsPage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} />
         ) : (
           <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
         )

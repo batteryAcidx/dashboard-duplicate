@@ -7,6 +7,9 @@ import { LeadStatus } from '../components/LeadStatusControl';
 import { buildChart } from '../lib/chart';
 import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
+import {
+  ContactType, activeUrgency, buildDetails, compareByUrgency, eventLabel, isCountedLead, normalizeType, whyWithYou,
+} from '../lib/leadView';
 
 /* ---------- time helpers (use the ACCOUNT's time zone, not the browser's) ---------- */
 
@@ -74,9 +77,20 @@ interface LeadRow {
   missed_call_at: string | null;
   response_seconds: number | null;
   created_at: string;
+  urgency?: string | null;
+  urgency_reason?: string | null;
+  contact_type?: string | null;
+  phone_e164?: string | null;
   appointments: { starts_at: string; status: string }[];
   attachments: { id: string }[];
   messages: { sent_at: string }[];
+}
+
+interface LeadStateRow {
+  lead_id: string;
+  stage: string | null;
+  collected: Record<string, unknown> | null;
+  handoff_reason: string | null;
 }
 
 interface MessageRow {
@@ -107,15 +121,6 @@ interface Thread {
   events: EventRow[];
 }
 
-function eventText(e: EventRow): string {
-  const d = e.detail || '';
-  if (e.actor === 'owner') {
-    if (d.startsWith('Marked ')) return 'You marked this ' + d.slice('Marked '.length);
-    if (d.startsWith('Job value updated to')) return 'You updated the job value to' + d.slice('Job value updated to'.length);
-  }
-  return d;
-}
-
 interface QueuePageProps {
   onNavigate?: (path: string) => void;
   onSignOut?: () => void;
@@ -135,6 +140,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   const [accountStatus, setAccountStatus] = useState('live');
   const [rows, setRows] = useState<LeadRow[]>([]);
   const [threads, setThreads] = useState<Record<string, Thread>>({});
+  const [states, setStates] = useState<Record<string, LeadStateRow>>({});
+  const [reviewPhones, setReviewPhones] = useState<Set<string>>(new Set());
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(selectedConversationId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -203,6 +210,23 @@ export const QueuePage: React.FC<QueuePageProps> = ({
     })();
   }, []);
 
+  /* extras for the list: what the assistant learned, and which numbers are waiting to be confirmed.
+     A problem here never hides the leads themselves. */
+  const loadExtras = useCallback(async () => {
+    const [st, ct] = await Promise.all([
+      supabase.from('lead_state').select('lead_id, stage, collected, handoff_reason'),
+      supabase.from('contacts').select('phone_e164').eq('needs_review', true),
+    ]);
+    if (!st.error) {
+      const map: Record<string, LeadStateRow> = {};
+      ((st.data as LeadStateRow[]) || []).forEach((x) => (map[x.lead_id] = x));
+      setStates(map);
+    }
+    if (!ct.error) {
+      setReviewPhones(new Set(((ct.data as { phone_e164: string }[]) || []).map((x) => x.phone_e164)));
+    }
+  }, []);
+
   /* leads list (light query: no message bodies) */
   const loadLeads = useCallback(async (silent = false) => {
     if (!isSupabaseConfigured) {
@@ -220,9 +244,10 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       setError(null);
       setRows((data as unknown as LeadRow[]) || []);
       setLastUpdated(Date.now());
+      loadExtras();
     }
     setLoading(false);
-  }, []);
+  }, [loadExtras]);
 
   /* one thread */
     const loadThread = useCallback(async (leadId: string) => {
@@ -350,31 +375,23 @@ export const QueuePage: React.FC<QueuePageProps> = ({
     return null;
   };
 
-  /* ---------- map rows to what DashboardBody expects ---------- */
-
-  const ACTIVE_STATUSES = ['booked', 'following_up', 'needs_you'];
-
-  // priority only counts while the lead is still urgent
-  const isPriorityActive = (r: LeadRow): boolean => {
-    if (!r.priority || !ACTIVE_STATUSES.includes(r.status)) return false;
-    const open = r.appointments.filter((a) => a.status !== 'cancelled');
-    if (open.length > 0) {
-      const now = Date.now();
-      // every appointment is in the past: the urgent moment is over
-      if (!open.some((a) => new Date(a.starts_at).getTime() >= now)) return false;
-    }
-    return true;
+  const handleChangeType = async (id: string, type: ContactType): Promise<string | null> => {
+    if (!rows.some((r) => r.id === id)) return 'Lead not found.';
+    const { error: err } = await supabase.rpc('owner_set_lead_type', { p_lead_id: id, p_type: type });
+    if (err) return 'Could not save. Check your connection and try again.';
+    // the status can change with the type (vendors are filed as not a lead), so reload everything
+    await Promise.all([loadLeads(true), loadThread(id)]);
+    return null;
   };
+
+  /* ---------- map rows to what DashboardBody expects ---------- */
 
   const latest = (r: LeadRow) =>
     r.messages.reduce((mx, m) => (m.sent_at > mx ? m.sent_at : mx), r.missed_call_at || r.created_at);
 
-  const sortedRows = [...rows].sort((a, b) => {
-    const pa = isPriorityActive(a);
-    const pb = isPriorityActive(b);
-    if (pa !== pb) return pa ? -1 : 1;
-    return latest(b).localeCompare(latest(a));
-  });
+  // emergencies first, then urgent, then everything else, newest first inside each group
+  const urgencyNow = (r: LeadRow) => activeUrgency(r);
+  const sortedRows = [...rows].sort((a, b) => compareByUrgency(urgencyNow(a), urgencyNow(b), latest(a), latest(b)));
 
   const leads: DashboardLead[] = sortedRows.map((r) => {
     const appt = [...r.appointments]
@@ -383,6 +400,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
     const when = appt ? new Date(appt.starts_at) : null;
     const thread = threads[r.id];
     const place = [r.address, r.city].filter(Boolean).join(', ');
+    const type = normalizeType(r.contact_type);
+    const learned = states[r.id];
 
     let transcript: DashboardLead['chatTranscript'] = [];
     if (thread) {
@@ -418,7 +437,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
                 ? ('support' as const)
                 : ('system' as const),
             sender: 'wedge' as const,
-            text: eventText(it.e),
+            text: eventLabel(it.e),
             time: clock(it.at, tz),
             dayDivider,
           };
@@ -445,7 +464,13 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       phone: r.phone || '',
       address: place || 'No address provided',
       timeAgo: ago(latest(r)),
-      priority: isPriorityActive(r),
+      priority: urgencyNow(r) !== 'normal',
+      urgency: urgencyNow(r),
+      urgencyReason: r.urgency_reason || undefined,
+      contactType: type,
+      needsReview: Boolean(r.phone_e164 && reviewPhones.has(r.phone_e164)),
+      details: buildDetails({ collected: learned?.collected ?? null, photoCount: r.attachments.length }),
+      whyWithYou: whyWithYou(learned?.handoff_reason, type),
       unread: r.unread,
       status: (r.status as LeadStatus) || 'booked',
       finalValue: r.final_value,
@@ -455,7 +480,13 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       missedCallTime: missedLabel,
       conversationTag: {
         icon: 'calendar',
-        label: when ? `Booked ${relDay(when, tz)} ${shortClock(appt!.starts_at, tz)}` : 'Not booked yet',
+        label: when
+          ? `Booked ${relDay(when, tz)} ${shortClock(appt!.starts_at, tz)}`
+          : type === 'supplier' || type === 'crew' || type === 'other'
+          ? 'Vendor, not booked'
+          : type === 'past_client' || type === 'recurring_client'
+          ? 'Flagged for you'
+          : 'Not booked yet',
       },
       secondaryTag: r.attachments.length
         ? { icon: 'photos', label: `${r.attachments.length} ${r.attachments.length === 1 ? 'Photo' : 'Photos'}` }
@@ -487,9 +518,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   const windowLabel =
     windowKey === '24h' ? 'Last 24 hours' : windowKey === '7d' ? 'Last 7 days' : 'Last 30 days';
     // "Not a lead" (vendors, existing customers, spam) is not a missed lead
-  const captured = rows.filter(
-    (r) => r.status !== 'not_a_lead' && new Date(r.missed_call_at || r.created_at).getTime() >= cutoff
-  );
+  // only homeowners count: vendors and existing customers are flagged for you, not part of the booking numbers
+  const captured = rows.filter((r) => isCountedLead(r) && new Date(r.missed_call_at || r.created_at).getTime() >= cutoff);
   // a lead marked Lost is no longer pipeline
   const booked = captured.filter(
     (r) => r.status !== 'lost' && r.appointments.some((a) => a.status !== 'cancelled')
@@ -507,7 +537,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       : 'No missed calls in this period.',
   };
 
-    const chart = buildChart(rows, windowKey, tz);
+    const chart = buildChart(rows.filter(isCountedLead), windowKey, tz);
 
   /* ---------- render ---------- */
 
@@ -570,6 +600,17 @@ export const QueuePage: React.FC<QueuePageProps> = ({
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
+                    if (onNavigate) onNavigate('/contacts');
+                    else window.location.assign('/contacts');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-300 hover:text-white hover:bg-[#192236] text-left"
+                >
+                  Contacts
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
                     if (onNavigate) onNavigate('/settings');
                     else window.location.assign('/settings');
                   }}
@@ -625,6 +666,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
           onSelectLead={handleSelect}
           onBack={handleBack}
           onChangeStatus={handleChangeStatus}
+          onChangeType={handleChangeType}
         />
       )}
     </div>

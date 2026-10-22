@@ -9,6 +9,11 @@ import {
 } from 'lucide-react';
 import { LeadStatusControl, LeadStatus, STATUS_LABEL } from './LeadStatusControl';
 import { OverviewChart } from './OverviewChart';
+import { ContactTypeControl } from './ContactTypeControl';
+import { LeadDetailsCard } from './LeadDetailsCard';
+import { UrgencyBadge } from './UrgencyBadge';
+import { FILTER_LABEL, TYPE_LABEL, countByFilter, matchesFilter, showFilterBar, visibleFilters } from '../lib/leadView';
+import type { ContactType, DetailRow, LeadFilter, Urgency } from '../lib/leadView';
 import type { ChartData } from '../lib/chart';
 
 export type WindowKey = '24h' | '7d' | '30d';
@@ -31,6 +36,12 @@ export interface DashboardLead {
   attachments?: { name: string; size: string }[];
   insurance: string;
   scheduledTime: string;
+  urgency?: Urgency;
+  urgencyReason?: string;
+  contactType?: ContactType;
+  needsReview?: boolean;
+  details?: DetailRow[];
+  whyWithYou?: string;
   chatTranscript: {
     sender: 'wedge' | 'homeowner';
     text: string;
@@ -63,6 +74,7 @@ interface DashboardBodyProps {
   onSelectLead: (id: string) => void;
   onBack?: () => void;
   onChangeStatus?: (id: string, status: LeadStatus, finalValue: number | null) => Promise<string | null>;
+  onChangeType?: (id: string, type: ContactType) => Promise<string | null>;
   windowKey?: WindowKey;
   onWindowChange?: (w: WindowKey) => void;
   chart?: ChartData | null;
@@ -85,6 +97,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
   onSelectLead,
   onBack,
   onChangeStatus,
+  onChangeType,
   windowKey,
   onWindowChange,
   chart,
@@ -93,11 +106,20 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'conversations'>('conversations');
   const [mobileView, setMobileView] = useState<'list' | 'chat'>(initialMobileView ?? 'list');
   const endRef = useRef<HTMLDivElement>(null);
+  const [filter, setFilter] = useState<LeadFilter>('all');
 
   // keep the phone view in step with the address (browser Back, direct links)
   useEffect(() => {
     setMobileView(selectedLeadId ? 'chat' : 'list');
   }, [selectedLeadId]);
+
+  const typeOf = (l: DashboardLead): ContactType => l.contactType ?? 'homeowner';
+  const urgencyOf = (l: DashboardLead): Urgency => l.urgency ?? (l.priority ? 'urgent' : 'normal');
+  const counts = countByFilter(leads.map(typeOf));
+  const filterBarOn = showFilterBar(counts);
+  // if the chosen tab empties out, quietly fall back to All
+  const activeFilter: LeadFilter = filterBarOn && counts[filter] > 0 ? filter : 'all';
+  const visibleLeads = leads.filter((l) => matchesFilter(typeOf(l), activeFilter));
 
   const selectedLead = leads.find((l) => l.id === selectedLeadId) || null;
   const unreadCount = leads.filter((l) => l.unread).length;
@@ -296,7 +318,32 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
               <div className="grid grid-cols-1 lg:grid-cols-12 min-h-0 lg:min-h-[420px] gap-6 lg:gap-8 flex-1">
                 {/* Left column: leads */}
                 <div className={`lg:col-span-5 space-y-3 lg:overflow-y-auto ${mobileView === 'chat' ? 'hidden lg:block' : 'block'}`}>
-                  {leads.map((lead) => {
+                  {filterBarOn && (
+                    <div
+                      role="tablist"
+                      aria-label="Filter conversations"
+                      className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 [scrollbar-width:none]"
+                    >
+                      {visibleFilters(counts).map((f) => (
+                        <button
+                          key={f}
+                          type="button"
+                          role="tab"
+                          aria-selected={activeFilter === f}
+                          onClick={() => setFilter(f)}
+                          className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border font-['Space_Grotesk'] text-xs font-bold cursor-pointer transition-colors ${
+                            activeFilter === f
+                              ? 'bg-[#151b2b] border-[#f59e0b]/50 text-[#ffc174]'
+                              : 'bg-[#0a0e19] border-[#232839] text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <span>{FILTER_LABEL[f]}</span>
+                          <span className="font-['JetBrains_Mono'] text-[10px] text-slate-500">{counts[f]}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {visibleLeads.map((lead) => {
                     const isSelected = selectedLead !== null && lead.id === selectedLead.id;
                     return (
                       <div
@@ -321,11 +368,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                                 <span className="font-['Space_Grotesk'] text-base lg:text-[15px] font-bold text-slate-100 tracking-tight truncate block">
                                   {lead.name}
                                 </span>
-                                {lead.priority && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-[#141a29]/80 border border-white/[0.09] text-[10px] lg:text-[9px] font-['JetBrains_Mono'] uppercase tracking-wider text-[#ffc174] font-semibold shrink-0 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
-                                    PRIORITY
-                                  </span>
-                                )}
+                                <UrgencyBadge urgency={urgencyOf(lead)} />
                               </div>
                               <span className="text-[11px] lg:text-[10px] font-['JetBrains_Mono'] text-slate-500 shrink-0">
                                 {lead.timeAgo}
@@ -349,6 +392,18 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                                 <span className="inline-flex items-center gap-1 font-['JetBrains_Mono'] text-[11px] lg:text-[9px] font-medium text-slate-400 bg-[#141926] border border-[#242b3d] px-1.5 py-0.5 rounded-full shrink-0">
                                   <Paperclip className="w-3 h-3 lg:w-2 lg:h-2 text-slate-400" />
                                   {lead.secondaryTag.label}
+                                </span>
+                              )}
+                              {typeOf(lead) !== 'homeowner' && (
+                                <span
+                                  className={`inline-flex items-center font-['JetBrains_Mono'] text-[11px] lg:text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0 border ${
+                                    typeOf(lead) === 'unknown' || lead.needsReview
+                                      ? 'text-[#ffc174] bg-[#261d10] border-[#f59e0b]/40'
+                                      : 'text-slate-300 bg-[#141a29]/80 border-white/[0.09]'
+                                  }`}
+                                >
+                                  {TYPE_LABEL[typeOf(lead)]}
+                                  {lead.needsReview ? ' · review' : ''}
                                 </span>
                               )}
                               {lead.status !== 'booked' && (
@@ -392,11 +447,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                         <span className="font-['Space_Grotesk'] text-base font-bold text-slate-100 tracking-tight truncate min-w-0">
                           {selectedLead.name}
                         </span>
-                        {selectedLead.priority && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-[#141a29]/80 border border-white/[0.09] text-[9px] font-['JetBrains_Mono'] uppercase tracking-wider text-[#ffc174] font-semibold shrink-0">
-                            PRIORITY
-                          </span>
-                        )}
+                        <UrgencyBadge urgency={urgencyOf(selectedLead)} size="phone" />
                       </div>
 
                       <div className="pt-4 lg:pt-0 pb-4 mb-5 border-b border-[#252939]">
@@ -406,11 +457,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                             <h3 className="font-['Space_Grotesk'] text-xl font-bold text-slate-100 tracking-tight">
                               {selectedLead.name}
                             </h3>
-                            {selectedLead.priority && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#141a29]/80 border border-white/[0.09] text-[10px] font-['JetBrains_Mono'] uppercase tracking-wider text-[#ffc174] font-semibold shrink-0 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
-                                HIGH PRIORITY
-                              </span>
-                            )}
+                            <UrgencyBadge urgency={urgencyOf(selectedLead)} size="header" />
                           </div>
 
                           <div className="flex flex-wrap items-center text-sm lg:text-[13px] text-slate-300 font-['Inter'] leading-relaxed">
@@ -449,19 +496,36 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                             ) : (
                               <span />
                             )}
-                            {onChangeStatus && (
-                              <LeadStatusControl
-                                key={selectedLead.id}
-                                status={selectedLead.status}
-                                finalValue={selectedLead.finalValue}
-                                changedBy={selectedLead.statusChangedBy}
-                                changedAtLabel={selectedLead.statusChangedLabel}
-                                onChange={(s, v) => onChangeStatus(selectedLead.id, s, v)}
-                              />
-                            )}
+                            <div className="flex flex-wrap items-center gap-2">
+                              {onChangeType && (
+                                <ContactTypeControl
+                                  key={`type-${selectedLead.id}`}
+                                  type={typeOf(selectedLead)}
+                                  needsReview={Boolean(selectedLead.needsReview)}
+                                  onChange={(t) => onChangeType(selectedLead.id, t)}
+                                />
+                              )}
+                              {onChangeStatus && (
+                                <LeadStatusControl
+                                  key={selectedLead.id}
+                                  status={selectedLead.status}
+                                  finalValue={selectedLead.finalValue}
+                                  changedBy={selectedLead.statusChangedBy}
+                                  changedAtLabel={selectedLead.statusChangedLabel}
+                                  onChange={(s, v) => onChangeStatus(selectedLead.id, s, v)}
+                                />
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
+
+                      <LeadDetailsCard
+                        rows={selectedLead.details ?? []}
+                        why={selectedLead.whyWithYou}
+                        urgency={urgencyOf(selectedLead)}
+                        urgencyReason={selectedLead.urgencyReason}
+                      />
 
                       {/* messages: page scroll on phones, a scroll box only on desktop */}
                       <div className="space-y-3 lg:space-y-3.5 lg:max-h-[380px] lg:overflow-y-auto lg:pr-2 pb-6 lg:pb-5">

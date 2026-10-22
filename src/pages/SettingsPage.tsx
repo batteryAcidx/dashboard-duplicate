@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronDown, LogOut, RotateCcw } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
+import { formatBlock, zonedToUtc } from '../lib/tz';
 
 // Keep in sync with Supabase: Authentication > Sign In / Providers > Email > Minimum password length
 const MIN_PASSWORD_LENGTH = 10;
@@ -206,6 +207,13 @@ interface Snap {
   fullName: string;
 }
 
+interface BlockRow {
+  id: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string | null;
+}
+
 interface SettingsPageProps {
   onNavigate?: (path: string) => void;
   onSignOut?: () => void;
@@ -238,6 +246,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
   const [officeClose, setOfficeClose] = useState('17:00');
   const [weekends, setWeekends] = useState(false);
   const [jobInputs, setJobInputs] = useState<Record<string, string>>({});
+  const [bookExisting, setBookExisting] = useState(false);
+  const [savedBookExisting, setSavedBookExisting] = useState(false);
+  const [blocks, setBlocks] = useState<BlockRow[]>([]);
+  const [blockDate, setBlockDate] = useState('');
+  const [blockStart, setBlockStart] = useState('09:00');
+  const [blockEnd, setBlockEnd] = useState('17:00');
+  const [blockReason, setBlockReason] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -250,6 +265,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
   const [notifyState, runNotify] = useSave();
   const [businessState, runBusiness] = useSave();
   const [jobsState, runJobs] = useSave();
+  const [bookingState, runBooking] = useSave();
+  const [blockState, runBlock] = useSave();
   const [passwordState, runPassword] = useSave();
 
   const [open, setOpen] = useState<string | null>(null);
@@ -290,7 +307,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     setUserId(user.id);
     setLoginEmail(user.email || userEmail);
 
-    const [acc, prof, jv, cal] = await Promise.all([
+    const [acc, prof, jv, cal, eng, blk] = await Promise.all([
       supabase
         .from('accounts')
         .select(
@@ -300,6 +317,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       supabase.from('profiles').select('full_name, password_changed_at').eq('id', user.id).maybeSingle(),
       supabase.from('job_values').select('job_type, typical_value'),
       supabase.from('setup_steps').select('status').eq('step_key', 'calendar_connected').maybeSingle(),
+      supabase.from('account_engine_settings').select('book_existing_customers').maybeSingle(),
+      supabase
+        .from('availability_blocks')
+        .select('id, starts_at, ends_at, reason')
+        .gte('ends_at', new Date().toISOString())
+        .order('starts_at', { ascending: true })
+        .limit(50),
     ]);
 
     if (acc.error || !acc.data) {
@@ -333,6 +357,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     setFullName(prof.data?.full_name || '');
     setPwChangedAt(prof.data?.password_changed_at || null);
     setCalendarStatus(cal.data?.status || null);
+    setBookExisting(Boolean(eng.data?.book_existing_customers));
+    setSavedBookExisting(Boolean(eng.data?.book_existing_customers));
+    setBlocks(blk.error ? [] : ((blk.data as BlockRow[]) || []));
 
     const inputs: Record<string, string> = {};
     JOB_TYPES.forEach((j) => (inputs[j.key] = ''));
@@ -455,6 +482,38 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       return null;
     });
 
+  const saveBooking = () =>
+    runBooking(async () => {
+      const { error } = await supabase.rpc('owner_set_book_existing', { p_value: bookExisting });
+      if (error) return 'Could not save. Check your connection and try again.';
+      setSavedBookExisting(bookExisting);
+      return null;
+    });
+
+  const addBlock = () =>
+    runBlock(async () => {
+      if (!blockDate) return 'Choose a date.';
+      if (!blockStart || !blockEnd) return 'Choose a start and an end time.';
+      if (blockEnd <= blockStart) return 'The end time must be after the start time.';
+      const start = zonedToUtc(blockDate, blockStart, tz || 'America/Chicago');
+      const end = zonedToUtc(blockDate, blockEnd, tz || 'America/Chicago');
+      if (!start || !end) return 'That date or time is not valid.';
+      if (end.getTime() < Date.now()) return 'That time has already passed.';
+      const { data, error } = await supabase
+        .from('availability_blocks')
+        .insert({ account_id: accountId, starts_at: start.toISOString(), ends_at: end.toISOString(), reason: blockReason.trim() || null })
+        .select('id, starts_at, ends_at, reason');
+      if (error || !data || data.length !== 1) return 'Could not save. Check your connection and try again.';
+      setBlocks((prev) => [...prev, ...(data as BlockRow[])].sort((a, b) => a.starts_at.localeCompare(b.starts_at)));
+      setBlockReason('');
+      return null;
+    });
+
+  const removeBlock = async (id: string) => {
+    const { error } = await supabase.from('availability_blocks').delete().eq('id', id);
+    if (!error) setBlocks((prev) => prev.filter((b) => b.id !== id));
+  };
+
   const changePassword = () =>
     runPassword(async () => {
       if (newPassword.length < MIN_PASSWORD_LENGTH) {
@@ -499,6 +558,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     : '';
   const jobSummary = s ? (s.jobCount ? `${s.jobCount} of ${JOB_TYPES.length} values set` : 'Not set yet') : '';
   const calendarSummary = calendarStatus === 'done' ? 'Connected' : 'Set up during onboarding';
+  const bookingSummary = `${savedBookExisting ? 'Existing customers are booked' : 'Existing customers are flagged for you'}${
+    blocks.length ? ` · ${blocks.length} blocked time${blocks.length === 1 ? '' : 's'}` : ''
+  }`;
   const initial = (loginEmail || userEmail || 'U').charAt(0).toUpperCase();
 
   return (
@@ -760,6 +822,85 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
                   >
                     See setup progress
                   </button>
+                </Section>
+
+                <Section
+                  id="booking"
+                  title="Contacts and booking"
+                  summary={bookingSummary}
+                  open={open === 'booking'}
+                  onToggle={() => toggle('booking')}
+                >
+                  <p className="text-[13px] text-slate-400 leading-relaxed">
+                    Homeowners are always booked for an inspection. Vendors and existing customers are flagged, and you get their details by
+                    text, so your calendar stays full of real jobs.
+                  </p>
+                  <div className="space-y-2">
+                    <CheckRow checked={bookExisting} onChange={setBookExisting}>
+                      Also book my past and recurring customers
+                    </CheckRow>
+                    <p className="text-[13px] text-slate-400 leading-relaxed">
+                      Off by default. When it is off, a past customer who calls is greeted by name and flagged for you, never offered an
+                      inspection time.
+                    </p>
+                  </div>
+                  <SaveRow state={bookingState} onSave={saveBooking} />
+
+                  <div className="pt-2 border-t border-[#1b2336] space-y-4">
+                    <div className="pt-4">
+                      <div className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-400 font-semibold mb-1">
+                        Blocked times
+                      </div>
+                      <p className="text-[13px] text-slate-400 leading-relaxed">
+                        Times we should never offer for an inspection, like a day off or a crew meeting. Times are in your time zone
+                        {tz ? ` (${tz.replace(/_/g, ' ')})` : ''}.
+                      </p>
+                    </div>
+                    {blocks.length > 0 && (
+                      <ul className="divide-y divide-[#1b2336] rounded-xl border border-[#22283a] bg-[#0e1322] px-4">
+                        {blocks.map((b) => (
+                          <li key={b.id} className="flex items-center justify-between gap-3 py-3">
+                            <span className="min-w-0 text-sm text-slate-200">
+                              {formatBlock(b.starts_at, b.ends_at, tz || 'America/Chicago')}
+                              {b.reason ? <span className="block text-[13px] text-slate-400">{b.reason}</span> : null}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeBlock(b.id)}
+                              className="shrink-0 px-2.5 py-1.5 rounded-lg font-['JetBrains_Mono'] text-xs text-slate-500 hover:text-red-400 cursor-pointer"
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <Field id="block-date" label="Date">
+                        <input id="block-date" type="date" value={blockDate} onChange={(e) => setBlockDate(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls} />
+                      </Field>
+                      <Field id="block-start" label="From">
+                        <input id="block-start" type="time" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls} />
+                      </Field>
+                      <Field id="block-end" label="Until">
+                        <input id="block-end" type="time" value={blockEnd} onChange={(e) => setBlockEnd(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls} />
+                      </Field>
+                    </div>
+                    <Field id="block-reason" label="Reason (optional)">
+                      <input id="block-reason" type="text" value={blockReason} onChange={(e) => setBlockReason(e.target.value)} maxLength={200} placeholder="Day off" className={inputCls} />
+                    </Field>
+                    <SaveRow state={blockState} onSave={addBlock} label="Block this time" />
+                  </div>
+
+                  <div className="pt-2 border-t border-[#1b2336]">
+                    <button
+                      type="button"
+                      onClick={() => goto('/contacts')}
+                      className="mt-4 px-5 py-3 rounded-xl bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-200 font-['Space_Grotesk'] font-bold text-sm uppercase tracking-wider cursor-pointer w-full sm:w-auto"
+                    >
+                      Manage contacts
+                    </button>
+                  </div>
                 </Section>
               </Group>
 

@@ -1222,6 +1222,113 @@ const StatusCard: React.FC<{ detail: ClientDetail; onChanged: () => Promise<void
 
 /* ---------- client detail ---------- */
 
+/* ---------- the texting engine: status and the kill switch ---------- */
+
+interface EngineStatus {
+  engine_enabled: boolean;
+  book_existing_customers: boolean;
+  phone_number: string | null;
+  forwarding_status: string | null;
+  twilio_ready: boolean;
+  registration_status: string | null;
+  account_status: string | null;
+  storm_mode: boolean | null;
+  weather_fetched_at: string | null;
+  weather_error: string | null;
+  has_coordinates: boolean;
+  pending_events: number;
+  failed_events: number;
+}
+
+function engineErrorText(message: string): string {
+  if (message.includes('mfa_required')) return 'Confirm your authenticator code first: sign out, sign in again and enter the code.';
+  if (message.includes('forbidden')) return 'Admin access is required.';
+  if (message.includes('not_ready')) {
+    return 'Not ready yet. The account needs to be live, with a texting number, an approved registration and verified call forwarding.';
+  }
+  return 'Something went wrong. Check your connection and try again.';
+}
+
+const EngineCard: React.FC<{ accountId: string; onDenied: () => void }> = ({ accountId, onDenied }) => {
+  const [st, setSt] = useState<EngineStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  const load = useCallback(async () => {
+    const { data, error: err } = await supabase.rpc('admin_engine_status', { p_account_id: accountId });
+    if (err) {
+      if (err.message.includes('forbidden')) return onDenied();
+      setError(engineErrorText(err.message));
+      return;
+    }
+    setError(null);
+    setSt(data as EngineStatus);
+  }, [accountId, onDenied]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const flip = async () => {
+    if (!st) return;
+    if (!confirming) {
+      setConfirming(true);
+      setTimeout(() => setConfirming(false), 6000);
+      return;
+    }
+    setConfirming(false);
+    setBusy(true);
+    setError(null);
+    const { error: err } = await supabase.rpc('admin_set_engine_enabled', { p_account_id: accountId, p_enabled: !st.engine_enabled });
+    setBusy(false);
+    if (err) {
+      if (err.message.includes('forbidden')) return onDenied();
+      setError(engineErrorText(err.message));
+      return;
+    }
+    await load();
+  };
+
+  const on = Boolean(st?.engine_enabled);
+  return (
+    <Card title="Texting engine" hint="The assistant that texts missed callers. It stays off until a number, registration and call forwarding are ready. Turning it off stops all texting for this client immediately.">
+      {!st ? (
+        <p className="text-sm text-slate-400">{error ? '' : 'Loading…'}</p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-4">
+            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border font-['Space_Grotesk'] text-sm font-bold ${on ? 'text-[#ffc174] bg-[#261d10] border-[#f59e0b]/50' : 'text-slate-400 bg-[#0a0e19] border-[#232a3f]'}`}>
+              <span className={`h-2 w-2 rounded-full ${on ? 'bg-[#ffc174] animate-pulse' : 'bg-slate-600'}`} />
+              {on ? 'Engine on' : 'Engine off'}
+            </span>
+            <button
+              type="button"
+              onClick={flip}
+              disabled={busy}
+              className={`px-4 py-2.5 rounded-xl font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50 ${
+                confirming
+                  ? on ? 'bg-red-500 text-white' : 'bg-[#f59e0b] text-[#150f05]'
+                  : 'bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-200'
+              }`}
+            >
+              {busy ? 'Working…' : confirming ? (on ? 'Tap to confirm: stop texting' : 'Tap to confirm: start texting') : on ? 'Turn off' : 'Turn on'}
+            </button>
+          </div>
+          <ReadRow label="Texting number" value={st.phone_number ? st.phone_number : 'Not set up'} />
+          <ReadRow label="Call forwarding" value={(st.forwarding_status || 'not_set').replace(/_/g, ' ')} />
+          <ReadRow label="Registration" value={(st.registration_status || '').replace(/_/g, ' ')} />
+          <ReadRow label="Phone service" value={st.twilio_ready ? 'Connected' : 'Not connected'} />
+          <ReadRow label="Weather" value={!st.has_coordinates ? 'Needs service-area coordinates' : st.weather_error ? 'Error: ' + st.weather_error : st.storm_mode ? 'Storm mode' : 'Clear'} />
+          <ReadRow label="Book existing customers" value={st.book_existing_customers ? 'Yes' : 'No (flagged only)'} />
+          <ReadRow label="Waiting / failed (24h)" value={`${st.pending_events} waiting, ${st.failed_events} failed`} />
+        </>
+      )}
+      <ErrorLine text={error} />
+    </Card>
+  );
+};
+
 type Tab = 'overview' | 'conversations' | 'setup' | 'account' | 'activity';
 
 const ClientDetailView: React.FC<{
@@ -1360,6 +1467,7 @@ const ClientDetailView: React.FC<{
                   <ReadRow label="Notification phone" value={detail.account.notification_phone || ''} />
                   <ReadRow label="Created" value={fmtDate(detail.account.created_at)} />
                 </Card>
+                <EngineCard accountId={detail.account.id} onDenied={onDenied} />
                 <StatusCard detail={detail} onChanged={reload} onDenied={onDenied} />
               </div>
             </div>

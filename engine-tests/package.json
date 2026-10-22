@@ -2,6 +2,10 @@
   "name": "engine-tests",
   "private": true,
   "type": "module",
-  "scripts": { "test": "tsx --test engine.test.ts" },
-  "devDependencies": { "tsx": "^4.19.0" }
+  "scripts": {
+    "test": "tsx --test engine.test.ts ui.test.ts ui-render.test.tsx"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
 }
