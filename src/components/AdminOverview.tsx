@@ -74,7 +74,7 @@ export const AdminOverview: React.FC<Props> = ({ accountId, call, onDenied }) =>
     <section className="p-5 sm:p-6 rounded-xl bg-[#111625] border border-[#22283a]">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="font-['Space_Grotesk'] text-base sm:text-lg font-bold text-slate-100 tracking-tight">
+          <h2 className="font-display text-base sm:text-lg font-bold text-slate-100 tracking-tight">
             Overview
           </h2>
           <p className="mt-1 text-xs sm:text-[13px] text-slate-400 leading-relaxed">
@@ -88,7 +88,7 @@ export const AdminOverview: React.FC<Props> = ({ accountId, call, onDenied }) =>
               type="button"
               aria-pressed={win === key}
               onClick={() => setWin(key)}
-              className={`px-3 py-1.5 rounded-md font-['JetBrains_Mono'] text-[11px] font-semibold transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-md font-data text-[11px] font-semibold transition-colors cursor-pointer ${
                 win === key
                   ? 'bg-[#151b2b] border border-[#2b354d] text-[#ffc174]'
                   : 'text-slate-400 hover:text-slate-200 border border-transparent'
@@ -102,24 +102,24 @@ export const AdminOverview: React.FC<Props> = ({ accountId, call, onDenied }) =>
 
       <div className="mt-4">
         {loading && !stats ? (
-          <p className="py-6 text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-slate-400">
+          <p className="py-6 text-center font-body text-xs tracking-wide text-slate-400">
             Loading overview…
           </p>
         ) : error ? (
-          <p role="alert" className="text-xs text-red-400 font-['Inter']">
+          <p role="alert" className="text-xs text-red-400 font-body">
             {error}
           </p>
         ) : (
           <div className={`grid grid-cols-2 lg:grid-cols-4 gap-3 ${loading ? 'opacity-60' : ''}`}>
             {cards.map(([label, value, note]) => (
               <div key={label} className="rounded-xl bg-[#0e1322] p-4 border border-[#252939]">
-                <span className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-[#d8c3ad] font-medium">
+                <span className="font-body text-[11px] tracking-wide text-[#d8c3ad] font-medium">
                   {label}
                 </span>
-                <div className="font-['Space_Grotesk'] text-2xl font-bold tracking-tight text-[#ffc174] tabular-nums mt-2">
+                <div className="font-display text-2xl font-bold tracking-tight text-[#ffc174] tabular-nums mt-2">
                   {value}
                 </div>
-                <span className="font-['Inter'] text-[11px] text-slate-400 block mt-1">{note}</span>
+                <span className="font-body text-[11px] text-slate-400 block mt-1">{note}</span>
               </div>
             ))}
           </div>

@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ChevronDown, LogOut, RotateCcw } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, RotateCcw } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 import { ContactTypeControl } from '../components/ContactTypeControl';
+import { AppHeader } from '../components/AppHeader';
+import { Card as UiCard, inputCls as uiInputCls } from '../components/ui';
 import { ContactType, PICKABLE_TYPES, TYPE_HINT, TYPE_LABEL, normalizeType } from '../lib/leadView';
 import { MAX_IMPORT_ROWS, formatPhone, parseContactCsv, toE164 } from '../lib/contacts';
 
@@ -21,26 +23,17 @@ interface ContactRow {
 }
 
 // 16px text on purpose: iPhones zoom the page when an input is smaller
-const inputCls =
-  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-xl px-4 py-3 text-base font-['Inter'] text-slate-100 placeholder:text-slate-600 disabled:opacity-60";
+const inputCls = uiInputCls;
 
 const btnPrimary =
-  "px-5 py-3 rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-['Space_Grotesk'] font-bold text-sm uppercase tracking-wider cursor-pointer disabled:opacity-50";
+  'inline-flex h-12 cursor-pointer items-center justify-center rounded-xl bg-[#f59e0b] px-6 font-display text-sm font-bold text-[#150f05] transition-colors hover:bg-[#fbbf24] disabled:opacity-50';
 const btnQuiet =
-  "px-4 py-3 rounded-xl bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-200 font-['Space_Grotesk'] font-bold text-sm uppercase tracking-wider cursor-pointer";
+  'inline-flex h-12 cursor-pointer items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] px-5 font-display text-sm font-semibold text-slate-200 transition-colors hover:bg-white/[0.07]';
 
-const Card: React.FC<{ title: string; hint?: string; children: React.ReactNode }> = ({ title, hint, children }) => (
-  <section className="rounded-xl border border-[#22283a] bg-[#111625] p-5 space-y-4">
-    <div>
-      <h2 className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight">{title}</h2>
-      {hint && <p className="mt-1 text-[13px] text-slate-400 leading-relaxed">{hint}</p>}
-    </div>
-    {children}
-  </section>
-);
+const Card = UiCard;
 
 const Label: React.FC<{ htmlFor: string; children: React.ReactNode }> = ({ htmlFor, children }) => (
-  <label htmlFor={htmlFor} className="block mb-2 font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-400 font-semibold">
+  <label htmlFor={htmlFor} className="mb-2 block text-sm font-medium text-slate-300">
     {children}
   </label>
 );
@@ -76,7 +69,7 @@ const ContactLine: React.FC<ContactLineProps> = ({ row, showReviewActions, remov
   return (
     <li className="py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div className="min-w-0">
-        <div className="font-['Space_Grotesk'] text-base font-bold text-slate-100 tracking-tight break-words">{title}</div>
+        <div className="font-display text-base font-bold text-slate-100 tracking-tight break-words">{title}</div>
         {sub && <div className="text-[13px] text-slate-400 break-words">{sub}</div>}
       </div>
       <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -89,7 +82,7 @@ const ContactLine: React.FC<ContactLineProps> = ({ row, showReviewActions, remov
         <button
           type="button"
           onClick={() => onRemove(row)}
-          className="px-2.5 py-1.5 rounded-lg font-['JetBrains_Mono'] text-xs text-slate-500 hover:text-red-400 cursor-pointer"
+          className="px-2.5 py-1.5 rounded-lg font-data text-xs text-slate-500 hover:text-red-400 cursor-pointer"
         >
           {removing === row.phone_e164 ? 'Tap again to remove' : 'Remove'}
         </button>
@@ -109,8 +102,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
   const [loadError, setLoadError] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState(getCachedCompany(userEmail));
   const [rows, setRows] = useState<ContactRow[]>([]);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'review' | ContactType>('all');
@@ -134,14 +125,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
 
   // remove: tap twice
   const [removing, setRemoving] = useState<string | null>(null);
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
 
   const goto = (path: string) => {
     if (onNavigate) onNavigate(path);
@@ -268,56 +251,23 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
     });
   }, [rows, query, typeFilter]);
 
-  const initial = (userEmail || 'U').charAt(0).toUpperCase();
-
   return (
-    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-['Inter']">
-      <div className="mx-auto max-w-5xl px-4 sm:px-6 pt-5 pb-3 flex items-center justify-between gap-4">
-        <span className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight truncate">{companyName}</span>
-        <div className="relative" ref={menuRef}>
-          <button
-            type="button"
-            onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#111728] border border-[#212b42] text-slate-300 text-xs"
-            aria-expanded={menuOpen}
-            aria-label="Account menu"
-          >
-            <span className="w-6 h-6 rounded-full bg-[#1e273d] border border-[#2d3a5a] flex items-center justify-center text-[11px] font-bold text-[#ffc174] shrink-0 sm:hidden">
-              {initial}
-            </span>
-            <span className="max-w-[160px] truncate hidden sm:inline">{userEmail}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#0f1422] border border-[#222c42] py-1.5 z-50">
-              <button type="button" onClick={() => { setMenuOpen(false); goto('/queue'); }} className="w-full px-4 py-3 text-sm text-slate-300 hover:text-white hover:bg-[#192236] text-left">
-                Dashboard
-              </button>
-              <button type="button" onClick={() => { setMenuOpen(false); goto('/settings'); }} className="w-full px-4 py-3 text-sm text-slate-300 hover:text-white hover:bg-[#192236] text-left">
-                Settings
-              </button>
-              <button type="button" onClick={() => { setMenuOpen(false); onSignOut?.(); }} className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-300 hover:text-red-400 hover:bg-[#192236] text-left">
-                <LogOut className="w-4 h-4" />
-                Sign out
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-body">
+      <AppHeader companyName={companyName} userEmail={userEmail} current="contacts" onNavigate={onNavigate} onSignOut={onSignOut} />
 
       <main className="mx-auto max-w-5xl px-4 sm:px-6 pb-[max(5rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={() => goto('/queue')}
-          className="inline-flex items-center gap-1.5 mt-3 -ml-1 pl-1 pr-3 py-2.5 text-sm font-['Space_Grotesk'] font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 mt-3 -ml-1 pl-1 pr-3 py-2.5 text-sm font-display font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 text-[#ffc174]" />
           Dashboard
         </button>
 
-        <div className="mt-5 mb-6">
-          <span className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#f59e0b] font-bold block mb-2">PEOPLE</span>
-          <h1 className="font-['Space_Grotesk'] text-3xl sm:text-4xl font-black uppercase tracking-tight text-slate-100 leading-none">Contacts</h1>
+        <div className="mb-10 mt-8">
+          <span className="font-body text-xs tracking-wide text-[#f59e0b] font-bold block mb-2">PEOPLE</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-100 leading-none">Contacts</h1>
           <p className="mt-3 max-w-2xl text-sm text-slate-400 leading-relaxed">
             Tell us who is who, and the assistant handles each call the right way. Homeowners get booked. Past and recurring customers are
             flagged for you and you get their details by text. Suppliers and crew are never texted or booked.
@@ -325,7 +275,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
         </div>
 
         {notice && (
-          <p role="status" className="mb-4 font-['JetBrains_Mono'] text-sm text-[#ffc174]">
+          <p role="status" className="mb-4 font-data text-sm text-[#ffc174]">
             {notice}
           </p>
         )}
@@ -345,7 +295,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
             </button>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-8">
             {needsReview.length > 0 && (
               <Card
                 title={`Needs your review (${needsReview.length})`}
@@ -416,7 +366,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
                     onChange={(e) => setCsv(e.target.value)}
                     rows={7}
                     placeholder={'phone, name, address, last job\n(214) 555-0101, Dana Ruiz, 9 Elm Dr, 2024 full reroof'}
-                    className={`${inputCls} font-['JetBrains_Mono'] !text-sm`}
+                    className={`${inputCls} font-data !text-sm`}
                   />
                 </div>
                 {csv.trim() && (

@@ -7,6 +7,13 @@ import type { DashboardLead } from '../src/components/DashboardBody.tsx';
 import { ContactTypeControl } from '../src/components/ContactTypeControl.tsx';
 import { LeadDetailsCard } from '../src/components/LeadDetailsCard.tsx';
 import { UrgencyBadge } from '../src/components/UrgencyBadge.tsx';
+import { AppHeader } from '../src/components/AppHeader.tsx';
+import { ControlsTab } from '../src/components/admin/ControlsTab.tsx';
+import type { Controls } from '../src/components/admin/ControlsTab.tsx';
+import { CalendarTab } from '../src/components/admin/CalendarTab.tsx';
+import type { Cal } from '../src/components/admin/CalendarTab.tsx';
+import { BillingTab } from '../src/components/admin/BillingTab.tsx';
+import type { Billing } from '../src/components/admin/BillingTab.tsx';
 
 const stats = { responseSpeed: '1m 02s', callsRescued: '4', pipelineValue: '$9,500', bookingRate: '50%', bookingDetail: '2 of 4 missed calls booked.' };
 
@@ -99,5 +106,122 @@ describe('the small components', () => {
   });
   test('details card shows nothing when there is nothing to say', () => {
     assert.equal(renderToStaticMarkup(<LeadDetailsCard rows={[]} />), '');
+  });
+});
+
+
+// ---------------------------------------------------------------- the client header
+describe('the client header', () => {
+  test('shows the company, the person, and no menu until it is opened', () => {
+    const html = renderToStaticMarkup(<AppHeader companyName="Summit Roofing" userEmail="mike@summit.example" current="settings" />);
+    assert.match(html, /Summit Roofing/);
+    assert.match(html, /mike@summit\.example/);
+    assert.match(html, /aria-label="Account menu"/);
+    assert.doesNotMatch(html, />Contacts</);
+  });
+});
+
+// ---------------------------------------------------------------- the admin tabs
+const controls: Controls = {
+  engine_enabled: false, paused_until: null, test_mode: false, book_existing_customers: false, daily_message_cap: 300, daily_conversation_cap: 60,
+  inspection_minutes: 60, slot_step_minutes: 60, min_notice_hours: 4, max_days_ahead: 14, concurrent_inspections: 1,
+  follow_up_schedule_hours: [4, 24, 72, 120, 168], reply_delay_min_seconds: 20, reply_delay_max_seconds: 75, ai_model: null,
+  phone_number: null, forwarding_status: 'not_set', twilio_ready: false, registration_status: 'pending', account_status: 'setup',
+  notification_phone: '+12145550100', service_lat: null, service_lon: null, service_country: 'US', storm_mode: null, weather_error: null,
+  pending_events: 0, failed_events: 0,
+};
+
+describe('admin: controls', () => {
+  test('a client that is not ready shows what is missing and cannot be turned on', () => {
+    const html = renderToStaticMarkup(<ControlsTab accountId="a" onDenied={() => {}} initial={controls} />);
+    assert.match(html, />Texting engine</);
+    assert.match(html, /Ready to turn on\?/);
+    assert.match(html, /Registration approved/);
+    assert.match(html, />Missing</);
+    assert.match(html, /<button[^>]*disabled=""[^>]*>[^<]*Turn on/, 'the Turn on button is disabled');
+    assert.match(html, /value="4, 24, 72, 120, 168"/);
+    assert.match(html, /aria-checked="false"[^>]*aria-label="Test mode"|aria-label="Test mode"[^>]*aria-checked="false"/);
+    for (const title of ['Limits', 'Booking rules', 'Timing and model', 'Texting number and forwarding', 'Weather location', 'Health']) assert.match(html, new RegExp(`>${title}<`));
+  });
+
+  test('a client that is ready can be turned on', () => {
+    const ready: Controls = { ...controls, account_status: 'live', registration_status: 'approved', phone_number: '+12145550199', twilio_ready: true, forwarding_status: 'verified' };
+    const html = renderToStaticMarkup(<ControlsTab accountId="a" onDenied={() => {}} initial={ready} />);
+    assert.doesNotMatch(html, />Missing</);
+    assert.doesNotMatch(html, /<button[^>]*disabled=""[^>]*>[^<]*Turn on/);
+  });
+
+  test('a running engine can be paused, and a paused one shows the time left', () => {
+    const on: Controls = { ...controls, engine_enabled: true, account_status: 'live', registration_status: 'approved' };
+    assert.match(renderToStaticMarkup(<ControlsTab accountId="a" onDenied={() => {}} initial={on} />), /Pause 1 hour/);
+    const paused: Controls = { ...on, paused_until: new Date(Date.now() + 90 * 60000).toISOString() };
+    const html = renderToStaticMarkup(<ControlsTab accountId="a" onDenied={() => {}} initial={paused} />);
+    assert.match(html, /Paused · 1h \d+m left/);
+    assert.match(html, /Resume now/);
+  });
+
+  test('before the data arrives it says so', () => {
+    assert.match(renderToStaticMarkup(<ControlsTab accountId="a" onDenied={() => {}} />), /Loading controls/);
+  });
+});
+
+const calendar: Cal = {
+  provider: 'none', status: 'not_connected', calendar_label: null, external_calendar_id: null, last_synced_at: null, last_error: null,
+  sync_requested_at: null, busy_blocks: 0, pending_writes: 0, failed_writes: 0, synced_appointments: 0, upcoming_appointments: 3,
+};
+
+describe('admin: calendar', () => {
+  test('not connected: sync cannot be requested, and the explanation is honest', () => {
+    const html = renderToStaticMarkup(<CalendarTab accountId="a" onDenied={() => {}} initial={calendar} />);
+    assert.match(html, />Calendar connection</);
+    assert.match(html, />Not connected</);
+    assert.match(html, /<button[^>]*disabled=""[^>]*>Request sync/);
+    assert.match(html, /next piece to build/);
+    assert.match(html, /Upcoming inspections/);
+  });
+  test('connected: shows the label and allows a sync request', () => {
+    const connected: Cal = { ...calendar, provider: 'google', status: 'active', calendar_label: 'Crew calendar', external_calendar_id: 'mike@summit.example', busy_blocks: 12, last_synced_at: new Date().toISOString() };
+    const html = renderToStaticMarkup(<CalendarTab accountId="a" onDenied={() => {}} initial={connected} />);
+    assert.match(html, />Connected</);
+    assert.match(html, /value="Crew calendar"/);
+    assert.doesNotMatch(html, /<button[^>]*disabled=""[^>]*>Request sync/);
+    assert.match(html, /Just now/);
+  });
+});
+
+const billing: Billing = {
+  exists: true, plan: 'Standard', monthly_price_cents: 69700, setup_fee_cents: 50000, status: 'active', billing_email: 'owner@summit.example',
+  payment_method: 'manual', go_live_at: '2026-10-10T12:00:00Z', next_invoice_on: '2026-11-10', guarantee_override: null, notes: null,
+  paid_cents: 50000, pending_cents: 69700,
+  invoices: [
+    { id: 'i1', issued_on: '2026-10-10', kind: 'setup', amount_cents: 50000, status: 'paid', paid_on: '2026-10-10', note: 'Setup fee' },
+    { id: 'i2', issued_on: '2026-11-10', kind: 'monthly', amount_cents: 69700, status: 'pending', paid_on: null, note: null },
+  ],
+  guarantee: { status: 'in_progress', required: 2, booked: 1, missed_calls: 9, calls_per_week: 6.3, days_left: 14 },
+};
+
+describe('admin: billing', () => {
+  test('summary, guarantee progress and invoices', () => {
+    const html = renderToStaticMarkup(<BillingTab accountId="a" onDenied={() => {}} initial={billing} />);
+    assert.match(html, />\$697</);
+    assert.match(html, />\$500</);
+    assert.match(html, />30-day guarantee</);
+    assert.match(html, />In progress</);
+    assert.match(html, /1 of 2 booked, 14 days left/);
+    assert.match(html, /width:50%/);
+    assert.match(html, />Paid</);
+    assert.match(html, />Waiting</);
+    assert.match(html, />Mark paid</);
+    assert.equal((html.match(/>Mark paid</g) ?? []).length, 1, 'only the unpaid invoice can be marked paid');
+  });
+  test('a missed guarantee is flagged as a credit due', () => {
+    const html = renderToStaticMarkup(<BillingTab accountId="a" onDenied={() => {}} initial={{ ...billing, guarantee: { status: 'credit_due', required: 2, booked: 1, calls_per_week: 8, missed_calls: 34 } }} />);
+    assert.match(html, />Credit due</);
+    assert.match(html, /The next month is free/);
+  });
+  test('a brand new client starts as a trial with the guarantee not started', () => {
+    const html = renderToStaticMarkup(<BillingTab accountId="a" onDenied={() => {}} initial={{ ...billing, exists: false, status: 'trial', invoices: [], paid_cents: 0, pending_cents: 0, go_live_at: null, guarantee: { status: 'not_started' } }} />);
+    assert.match(html, />Not started</);
+    assert.match(html, /No invoices yet/);
   });
 });

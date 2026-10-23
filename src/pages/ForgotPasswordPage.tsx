@@ -126,15 +126,15 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
 
             {/* Wordmark */}
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
-              <span className="font-['Space_Grotesk'] text-xl sm:text-3xl uppercase tracking-tight text-slate-100 font-black">
+              <span className="font-display text-xl sm:text-3xl tracking-tight text-slate-100 font-extrabold">
                 WEDGE<span className="text-[#ffc174]">SCALE</span>
               </span>
-              <span className="font-['JetBrains_Mono'] text-[10px] sm:text-sm font-bold uppercase tracking-widest text-[#ffc174] bg-[#252939] border border-[#ffc174]/40 px-2 sm:px-2.5 py-0.5 rounded-lg shadow-sm">
-                RECOVERY
+              <span className="font-body text-[11px] sm:text-sm font-bold tracking-wide text-[#ffc174] bg-[#252939] border border-[#ffc174]/40 px-2 sm:px-2.5 py-0.5 rounded-lg shadow-sm">
+                Recovery
               </span>
             </div>
 
-            <p className="font-['Inter'] text-xs sm:text-sm text-slate-400 mt-3 sm:mt-4 text-center max-w-sm leading-relaxed text-pretty">
+            <p className="font-body text-xs sm:text-sm text-slate-400 mt-3 sm:mt-4 text-center max-w-sm leading-relaxed text-pretty">
               {isSubmitted
                 ? 'Check your email.'
                 : 'Enter your email to recover access to your account.'}
@@ -150,10 +150,10 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
                   <MailCheck className="w-4 h-4 text-[#f59e0b]" />
                 </div>
                 <div className="space-y-1">
-                  <p className="font-['Inter'] text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+                  <p className="font-body text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
                     If that email has an account, we've sent a link.
                   </p>
-                  <p className="font-['Inter'] text-[11px] sm:text-xs text-slate-500 leading-relaxed">
+                  <p className="font-body text-[11px] sm:text-xs text-slate-500 leading-relaxed">
                     Be sure to check your spam or promotions folder.
                   </p>
                 </div>
@@ -162,7 +162,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
               {errorMessage && (
                 <div
                   role="alert"
-                  className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-['Inter'] leading-relaxed shadow-sm"
+                  className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-body leading-relaxed shadow-sm"
                 >
                   {errorMessage}
                 </div>
@@ -173,9 +173,9 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
                 <button
                   type="button"
                   onClick={handleBackToLogin}
-                  className="w-full inline-flex items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-['Space_Grotesk'] text-xs sm:text-base font-black uppercase tracking-widest text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60"
+                  className="w-full inline-flex items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-display text-xs sm:text-base font-extrabold tracking-wide text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60"
                 >
-                  RETURN TO LOGIN
+                  Back to sign in
                 </button>
 
                 <div className="text-center pt-1">
@@ -183,7 +183,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
                     type="button"
                     onClick={sendLink}
                     disabled={cooldown > 0 || isLoading}
-                    className="font-['JetBrains_Mono'] text-xs text-slate-400 hover:text-[#ffc174] transition-colors uppercase tracking-[0.16em] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="font-body text-xs text-slate-400 hover:text-[#ffc174] transition-colors tracking-[0.16em] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isLoading
                       ? 'Sending...'
@@ -199,7 +199,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
               {errorMessage && (
                 <div
                   role="alert"
-                  className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-['Inter'] leading-relaxed shadow-sm"
+                  className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-body leading-relaxed shadow-sm"
                 >
                   {errorMessage}
                 </div>
@@ -209,7 +209,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
               <div className="space-y-2 text-left">
                 <label
                   htmlFor="recovery-email"
-                  className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300"
+                  className="block font-body text-xs font-bold tracking-[0.16em] text-slate-300"
                 >
                   Email Address
                 </label>
@@ -228,7 +228,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="contractor@roofingcompany.com"
-                    className="w-full pl-11 pr-4 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-base sm:text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 transition-colors"
+                    className="w-full pl-11 pr-4 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-base sm:text-sm font-body text-slate-100 placeholder:text-slate-600 transition-colors"
                   />
                 </div>
               </div>
@@ -238,7 +238,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
                 <button
                   type="submit"
                   disabled={isLoading || cooldown > 0}
-                  className="w-full inline-flex items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-['Space_Grotesk'] text-xs sm:text-base font-black uppercase tracking-widest text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60 disabled:opacity-50"
+                  className="w-full inline-flex items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-display text-xs sm:text-base font-extrabold tracking-wide text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60 disabled:opacity-50"
                 >
                   {isLoading
                     ? 'SENDING LINK...'
@@ -252,7 +252,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
                   <button
                     type="button"
                     onClick={handleBackToLogin}
-                    className="inline-flex items-center justify-center gap-2 font-['JetBrains_Mono'] text-xs text-slate-400 hover:text-[#ffc174] transition-colors uppercase tracking-[0.16em] cursor-pointer"
+                    className="inline-flex items-center justify-center gap-2 font-body text-xs text-slate-400 hover:text-[#ffc174] transition-colors tracking-[0.16em] cursor-pointer"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
                     Back to Log In
@@ -266,7 +266,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
 
       {/* Bottom Footer Line */}
       <div className="w-full text-center z-10 pt-8 pb-2">
-        <p className="font-['JetBrains_Mono'] text-xs text-slate-500 uppercase tracking-widest">
+        <p className="font-body text-xs text-slate-500 tracking-wide">
           WedgeScale Dashboard Platform
         </p>
       </div>

@@ -5,6 +5,10 @@ import { NotFoundPage } from './NotFoundPage';
 import { AdminConversations } from '../components/AdminConversations';
 import { AdminOverview } from '../components/AdminOverview';
 import { AdminMfaGate } from '../components/AdminMfaGate';
+import { ControlsTab } from '../components/admin/ControlsTab';
+import { CalendarTab } from '../components/admin/CalendarTab';
+import { BillingTab } from '../components/admin/BillingTab';
+import { Card as UiCard, Row as UiRow } from '../components/ui';
 
 /* ---------- types ---------- */
 
@@ -54,7 +58,7 @@ interface ClientDetail {
     registration_status: string;
     texting_number: string | null;
     notification_phone: string | null;
-    ghl_location_id: string | null;
+    ghl_location_id?: string | null;
     created_at: string;
   };
   territories: TerritoryRef[];
@@ -162,21 +166,21 @@ const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
 const inputCls =
-  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg px-3 py-2.5 text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 disabled:opacity-60";
+  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg px-3 py-2.5 text-sm font-body text-slate-100 placeholder:text-slate-600 disabled:opacity-60";
 const labelCls =
-  "block font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-slate-400 font-semibold mb-1.5";
+  "block font-body text-[11px] tracking-wide text-slate-400 font-semibold mb-1.5";
 const primaryBtn =
-  "px-4 py-2 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50";
+  "px-4 py-2 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50";
 const ghostBtn =
-  "px-4 py-2 rounded-lg bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-300 font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50";
+  "px-4 py-2 rounded-lg bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-300 font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50";
 const dangerBtn =
-  "px-4 py-2 rounded-lg bg-red-950/30 border border-red-900/40 hover:border-red-700/60 text-red-400 font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50";
+  "px-4 py-2 rounded-lg bg-red-950/30 border border-red-900/40 hover:border-red-700/60 text-red-400 font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50";
 
 /* ---------- small building blocks ---------- */
 
 const StatusChip: React.FC<{ status: AccountStatus }> = ({ status }) => (
   <span
-    className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[10px] font-['JetBrains_Mono'] uppercase tracking-wider font-semibold shrink-0 ${STATUS_CHIP[status]}`}
+    className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-body tracking-wide font-semibold shrink-0 ${STATUS_CHIP[status]}`}
   >
     {STATUS_LABEL[status]}
   </span>
@@ -184,7 +188,7 @@ const StatusChip: React.FC<{ status: AccountStatus }> = ({ status }) => (
 
 const Pill: React.FC<{ children: React.ReactNode; tone?: 'gold' | 'plain' }> = ({ children, tone = 'plain' }) => (
   <span
-    className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[10px] font-['JetBrains_Mono'] uppercase tracking-wider font-semibold shrink-0 ${
+    className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-body tracking-wide font-semibold shrink-0 ${
       tone === 'gold'
         ? 'border-[#f59e0b]/50 bg-[#261d10] text-[#ffc174]'
         : 'border-[#232a3f] bg-[#0a0e19] text-slate-400'
@@ -195,37 +199,28 @@ const Pill: React.FC<{ children: React.ReactNode; tone?: 'gold' | 'plain' }> = (
 );
 
 const TerritoryTag: React.FC<{ name: string }> = ({ name }) => (
-  <span className="inline-flex items-center px-2 py-0.5 rounded-md border border-[#2b354d] bg-[#151b2b] text-[11px] font-['JetBrains_Mono'] text-slate-200">
+  <span className="inline-flex items-center px-2 py-0.5 rounded-md border border-[#2b354d] bg-[#151b2b] text-[11px] font-data text-slate-200">
     {name}
   </span>
 );
 
 const Card: React.FC<{ title: string; hint?: string; children: React.ReactNode }> = ({ title, hint, children }) => (
-  <section className="p-5 sm:p-6 rounded-xl bg-[#111625] border border-[#22283a]">
-    <h2 className="font-['Space_Grotesk'] text-base sm:text-lg font-bold text-slate-100 tracking-tight">{title}</h2>
-    {hint && <p className="mt-1 text-xs sm:text-[13px] text-slate-400 leading-relaxed">{hint}</p>}
-    <div className="mt-4 space-y-4">{children}</div>
-  </section>
+  <UiCard title={title} hint={hint}>
+    {children}
+  </UiCard>
 );
 
-const ReadRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="flex items-start justify-between gap-4 text-sm">
-    <span className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-slate-500 font-semibold pt-0.5 shrink-0">
-      {label}
-    </span>
-    <span className="text-slate-200 text-right break-words min-w-0">{value || '—'}</span>
-  </div>
-);
+const ReadRow: React.FC<{ label: string; value: string }> = ({ label, value }) => <UiRow label={label} value={value} />;
 
 const ErrorLine: React.FC<{ text: string | null }> = ({ text }) =>
   text ? (
-    <p role="alert" className="text-xs text-red-400 font-['Inter']">
+    <p role="alert" className="text-xs text-red-400 font-body">
       {text}
     </p>
   ) : null;
 
 const LoadingBlock: React.FC<{ text: string }> = ({ text }) => (
-  <div className="py-20 text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-slate-400">{text}</div>
+  <div className="py-20 text-center font-body text-xs tracking-wide text-slate-400">{text}</div>
 );
 
 const RetryBlock: React.FC<{ text: string; onRetry: () => void }> = ({ text, onRetry }) => (
@@ -274,7 +269,7 @@ const CreateClientForm: React.FC<{
 
   return (
     <form onSubmit={submit} className="mb-6 p-5 sm:p-6 rounded-xl bg-[#111625] border border-[#f59e0b]/30 space-y-4">
-      <h2 className="font-['Space_Grotesk'] text-base sm:text-lg font-bold text-slate-100 tracking-tight">New client</h2>
+      <h2 className="font-display text-base sm:text-lg font-bold text-slate-100 tracking-tight">New client</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label htmlFor="c-company" className={labelCls}>Company name</label>
@@ -371,8 +366,8 @@ const ClientListView: React.FC<{ goto: (p: string) => void; onDenied: () => void
     <>
       <div className="mt-8 mb-6 flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <span className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#f59e0b] font-bold block mb-2">ADMIN</span>
-          <h1 className="font-['Space_Grotesk'] text-3xl sm:text-4xl font-black uppercase tracking-tight text-slate-100 leading-none">
+          <span className="font-body text-xs tracking-wide text-[#f59e0b] font-bold block mb-2">ADMIN</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-100 leading-none">
             Clients
           </h1>
         </div>
@@ -384,7 +379,7 @@ const ClientListView: React.FC<{ goto: (p: string) => void; onDenied: () => void
 
       {created && (
         <div className="mb-6 p-4 rounded-xl bg-[#1a1710] border border-[#f59e0b]/40 text-sm text-slate-200 leading-relaxed">
-          <strong className="font-['Space_Grotesk']">{created.name}</strong> created. An invite was sent to {created.owner_email}.{' '}
+          <strong className="font-display">{created.name}</strong> created. An invite was sent to {created.owner_email}.{' '}
           <button type="button" onClick={() => goto(`/admin/${created.account_id}`)} className="text-[#ffc174] underline cursor-pointer">
             Open client
           </button>
@@ -417,7 +412,7 @@ const ClientListView: React.FC<{ goto: (p: string) => void; onDenied: () => void
                   type="button"
                   aria-pressed={filter === key}
                   onClick={() => setFilter(key)}
-                  className={`px-3 py-1.5 rounded-md font-['JetBrains_Mono'] text-[11px] font-semibold transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-md font-data text-[11px] font-semibold transition-colors cursor-pointer ${
                     filter === key
                       ? 'bg-[#151b2b] border border-[#2b354d] text-[#ffc174]'
                       : 'text-slate-400 hover:text-slate-200 border border-transparent'
@@ -443,7 +438,7 @@ const ClientListView: React.FC<{ goto: (p: string) => void; onDenied: () => void
             </div>
           ) : (
             <div className="rounded-xl border border-[#22283a] bg-[#111625] overflow-hidden">
-              <div className="grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_minmax(0,2fr)_minmax(0,1.3fr)] gap-4 px-5 py-3 border-b border-[#1b2336] font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+              <div className="grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_minmax(0,2fr)_minmax(0,1.3fr)] gap-4 px-5 py-3 border-b border-[#1b2336] font-body text-[11px] tracking-wide text-slate-500 font-semibold">
                 <span>Client</span>
                 <span>Territory</span>
                 <span>Owner</span>
@@ -460,7 +455,7 @@ const ClientListView: React.FC<{ goto: (p: string) => void; onDenied: () => void
                         className="w-full text-left grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_minmax(0,2fr)_minmax(0,1.3fr)] items-center gap-4 px-5 py-4 hover:bg-[#151b2c] transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-                          <span className="font-['Space_Grotesk'] text-[15px] font-bold text-slate-100 truncate">{c.name}</span>
+                          <span className="font-display text-[15px] font-bold text-slate-100 truncate">{c.name}</span>
                           <StatusChip status={c.status} />
                           {c.waiting > 0 && <Pill tone="gold">Waiting on client</Pill>}
                         </div>
@@ -479,7 +474,7 @@ const ClientListView: React.FC<{ goto: (p: string) => void; onDenied: () => void
                           <div className="h-1.5 flex-1 rounded-full bg-[#151b2b] overflow-hidden">
                             <div className="h-full rounded-full bg-[#f59e0b]" style={{ width: `${pct}%` }} />
                           </div>
-                          <span className="font-['JetBrains_Mono'] text-[11px] text-slate-500 shrink-0">
+                          <span className="font-data text-[11px] text-slate-500 shrink-0">
                             {c.steps_done}/{c.steps_total}
                           </span>
                         </div>
@@ -573,8 +568,8 @@ const TerritoriesView: React.FC<{ goto: (p: string) => void; onDenied: () => voi
   return (
     <>
       <div className="mt-8 mb-6">
-        <span className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#f59e0b] font-bold block mb-2">ADMIN</span>
-        <h1 className="font-['Space_Grotesk'] text-3xl sm:text-4xl font-black uppercase tracking-tight text-slate-100 leading-none">
+        <span className="font-body text-xs tracking-wide text-[#f59e0b] font-bold block mb-2">ADMIN</span>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-100 leading-none">
           Territories
         </h1>
         <p className="mt-2 text-sm text-slate-400">
@@ -584,7 +579,7 @@ const TerritoriesView: React.FC<{ goto: (p: string) => void; onDenied: () => voi
       </div>
 
       <form onSubmit={add} className="mb-6 p-5 rounded-xl bg-[#111625] border border-[#22283a]">
-        <h2 className="font-['Space_Grotesk'] text-base font-bold text-slate-100 tracking-tight mb-3">Add a territory</h2>
+        <h2 className="font-display text-base font-bold text-slate-100 tracking-tight mb-3">Add a territory</h2>
         <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] gap-4 items-end">
           <div>
             <label htmlFor="t-name" className={labelCls}>Name</label>
@@ -631,7 +626,7 @@ const TerritoriesView: React.FC<{ goto: (p: string) => void; onDenied: () => voi
                   type="button"
                   aria-pressed={filter === key}
                   onClick={() => setFilter(key)}
-                  className={`px-3 py-1.5 rounded-md font-['JetBrains_Mono'] text-[11px] font-semibold transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-md font-data text-[11px] font-semibold transition-colors cursor-pointer ${
                     filter === key
                       ? 'bg-[#151b2b] border border-[#2b354d] text-[#ffc174]'
                       : 'text-slate-400 hover:text-slate-200 border border-transparent'
@@ -657,7 +652,7 @@ const TerritoriesView: React.FC<{ goto: (p: string) => void; onDenied: () => voi
             </div>
           ) : (
             <div className="rounded-xl border border-[#22283a] bg-[#111625] overflow-hidden">
-              <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,2.2fr)] gap-4 px-5 py-3 border-b border-[#1b2336] font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+              <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,2.2fr)] gap-4 px-5 py-3 border-b border-[#1b2336] font-body text-[11px] tracking-wide text-slate-500 font-semibold">
                 <span>Territory</span>
                 <span>Status</span>
                 <span>Held by</span>
@@ -674,8 +669,8 @@ const TerritoriesView: React.FC<{ goto: (p: string) => void; onDenied: () => voi
                       className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,2.2fr)] items-center gap-4 px-5 py-3.5"
                     >
                       <div className="min-w-0">
-                        <span className="font-['Space_Grotesk'] text-sm font-bold text-slate-100">{t.name}</span>
-                        <span className="ml-2 text-[11px] text-slate-500 font-['JetBrains_Mono']">
+                        <span className="font-display text-sm font-bold text-slate-100">{t.name}</span>
+                        <span className="ml-2 text-[11px] text-slate-500 font-data">
                           {t.country}
                           {t.region ? ` · ${t.region}` : ''}
                         </span>
@@ -698,7 +693,7 @@ const TerritoriesView: React.FC<{ goto: (p: string) => void; onDenied: () => voi
                           <span className="text-slate-500">—</span>
                         )}
                       </div>
-                      <div className="text-xs text-slate-400 font-['JetBrains_Mono']">{fmtDate(t.locked_at)}</div>
+                      <div className="text-xs text-slate-400 font-data">{fmtDate(t.locked_at)}</div>
                       <div className="flex items-center justify-end gap-2 flex-wrap">
                         {confirming ? (
                           <>
@@ -844,14 +839,14 @@ const StepsPanel: React.FC<{
               <li key={`${s.id}-${s.status}-${s.note ?? ''}`} className="p-4 rounded-lg bg-[#0e1322] border border-[#252939]">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="font-['Space_Grotesk'] text-sm font-bold text-slate-100">{s.title}</span>
+                    <span className="font-display text-sm font-bold text-slate-100">{s.title}</span>
                     <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[10px] font-['JetBrains_Mono'] uppercase tracking-wider font-semibold ${STEP_TONE[s.status]}`}
+                      className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-body tracking-wide font-semibold ${STEP_TONE[s.status]}`}
                     >
                       {STEP_LABEL[s.status]}
                     </span>
                     {s.status === 'done' && s.completed_at && (
-                      <span className="font-['JetBrains_Mono'] text-[11px] text-slate-500">{fmt(s.completed_at)}</span>
+                      <span className="font-data text-[11px] text-slate-500">{fmt(s.completed_at)}</span>
                     )}
                   </div>
                   <button type="button" onClick={() => setOpen(isOpen ? null : s.step_key)} className={ghostBtn}>
@@ -921,7 +916,7 @@ const DetailsCard: React.FC<{ detail: ClientDetail; onSaved: () => Promise<void>
         <button type="button" onClick={save} disabled={!dirty || saving} className={primaryBtn}>
           {saving ? 'Saving…' : 'Save details'}
         </button>
-        {saved && <span className="font-['JetBrains_Mono'] text-xs text-[#ffc174]">Saved</span>}
+        {saved && <span className="font-data text-xs text-[#ffc174]">Saved</span>}
         <ErrorLine text={error} />
       </div>
     </Card>
@@ -978,8 +973,8 @@ const TerritoriesCard: React.FC<{ detail: ClientDetail; onChanged: () => Promise
           {detail.territories.map((t) => (
             <li key={t.id} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-[#0e1322] border border-[#252939]">
               <div className="min-w-0">
-                <span className="font-['Space_Grotesk'] text-sm font-bold text-slate-100">{t.name}</span>
-                <span className="ml-2 text-[11px] text-slate-500 font-['JetBrains_Mono']">
+                <span className="font-display text-sm font-bold text-slate-100">{t.name}</span>
+                <span className="ml-2 text-[11px] text-slate-500 font-data">
                   {t.country}
                   {t.region ? ` · ${t.region}` : ''} · since {fmtDate(t.locked_at)}
                 </span>
@@ -1096,7 +1091,7 @@ const OwnerCard: React.FC<{ detail: ClientDetail; onChanged: () => Promise<void>
             <button type="button" onClick={resend} disabled={busy} className={primaryBtn}>
               {busy ? 'Sending…' : owner ? 'Resend invite' : 'Send invite'}
             </button>
-            {msg && <span className="font-['JetBrains_Mono'] text-xs text-[#ffc174]">{msg}</span>}
+            {msg && <span className="font-data text-xs text-[#ffc174]">{msg}</span>}
           </div>
           <ErrorLine text={error} />
           <p className="text-[11.5px] text-slate-500 leading-relaxed">
@@ -1143,7 +1138,7 @@ const StatusCard: React.FC<{ detail: ClientDetail; onChanged: () => Promise<void
   return (
     <Card
       title="Account status"
-      hint="Pausing marks the account paused. Texting actually stops once the GHL connection is built."
+      hint="Pausing marks the account paused and stops all texting for this client."
     >
       <div className="flex items-center gap-3 flex-wrap">
         {(status === 'setup' || status === 'live') && (
@@ -1173,7 +1168,7 @@ const StatusCard: React.FC<{ detail: ClientDetail; onChanged: () => Promise<void
 
       {status !== 'cancelled' && (
         <div className="mt-2 p-4 rounded-lg border border-red-900/40 bg-red-950/10 space-y-3">
-          <div className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-red-400 font-semibold">
+          <div className="font-body text-[11px] tracking-wide text-red-400 font-semibold">
             Danger area
           </div>
           <p className="text-xs text-slate-400 leading-relaxed">
@@ -1222,114 +1217,7 @@ const StatusCard: React.FC<{ detail: ClientDetail; onChanged: () => Promise<void
 
 /* ---------- client detail ---------- */
 
-/* ---------- the texting engine: status and the kill switch ---------- */
-
-interface EngineStatus {
-  engine_enabled: boolean;
-  book_existing_customers: boolean;
-  phone_number: string | null;
-  forwarding_status: string | null;
-  twilio_ready: boolean;
-  registration_status: string | null;
-  account_status: string | null;
-  storm_mode: boolean | null;
-  weather_fetched_at: string | null;
-  weather_error: string | null;
-  has_coordinates: boolean;
-  pending_events: number;
-  failed_events: number;
-}
-
-function engineErrorText(message: string): string {
-  if (message.includes('mfa_required')) return 'Confirm your authenticator code first: sign out, sign in again and enter the code.';
-  if (message.includes('forbidden')) return 'Admin access is required.';
-  if (message.includes('not_ready')) {
-    return 'Not ready yet. The account needs to be live, with a texting number, an approved registration and verified call forwarding.';
-  }
-  return 'Something went wrong. Check your connection and try again.';
-}
-
-const EngineCard: React.FC<{ accountId: string; onDenied: () => void }> = ({ accountId, onDenied }) => {
-  const [st, setSt] = useState<EngineStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-
-  const load = useCallback(async () => {
-    const { data, error: err } = await supabase.rpc('admin_engine_status', { p_account_id: accountId });
-    if (err) {
-      if (err.message.includes('forbidden')) return onDenied();
-      setError(engineErrorText(err.message));
-      return;
-    }
-    setError(null);
-    setSt(data as EngineStatus);
-  }, [accountId, onDenied]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const flip = async () => {
-    if (!st) return;
-    if (!confirming) {
-      setConfirming(true);
-      setTimeout(() => setConfirming(false), 6000);
-      return;
-    }
-    setConfirming(false);
-    setBusy(true);
-    setError(null);
-    const { error: err } = await supabase.rpc('admin_set_engine_enabled', { p_account_id: accountId, p_enabled: !st.engine_enabled });
-    setBusy(false);
-    if (err) {
-      if (err.message.includes('forbidden')) return onDenied();
-      setError(engineErrorText(err.message));
-      return;
-    }
-    await load();
-  };
-
-  const on = Boolean(st?.engine_enabled);
-  return (
-    <Card title="Texting engine" hint="The assistant that texts missed callers. It stays off until a number, registration and call forwarding are ready. Turning it off stops all texting for this client immediately.">
-      {!st ? (
-        <p className="text-sm text-slate-400">{error ? '' : 'Loading…'}</p>
-      ) : (
-        <>
-          <div className="flex items-center justify-between gap-4">
-            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border font-['Space_Grotesk'] text-sm font-bold ${on ? 'text-[#ffc174] bg-[#261d10] border-[#f59e0b]/50' : 'text-slate-400 bg-[#0a0e19] border-[#232a3f]'}`}>
-              <span className={`h-2 w-2 rounded-full ${on ? 'bg-[#ffc174] animate-pulse' : 'bg-slate-600'}`} />
-              {on ? 'Engine on' : 'Engine off'}
-            </span>
-            <button
-              type="button"
-              onClick={flip}
-              disabled={busy}
-              className={`px-4 py-2.5 rounded-xl font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50 ${
-                confirming
-                  ? on ? 'bg-red-500 text-white' : 'bg-[#f59e0b] text-[#150f05]'
-                  : 'bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-200'
-              }`}
-            >
-              {busy ? 'Working…' : confirming ? (on ? 'Tap to confirm: stop texting' : 'Tap to confirm: start texting') : on ? 'Turn off' : 'Turn on'}
-            </button>
-          </div>
-          <ReadRow label="Texting number" value={st.phone_number ? st.phone_number : 'Not set up'} />
-          <ReadRow label="Call forwarding" value={(st.forwarding_status || 'not_set').replace(/_/g, ' ')} />
-          <ReadRow label="Registration" value={(st.registration_status || '').replace(/_/g, ' ')} />
-          <ReadRow label="Phone service" value={st.twilio_ready ? 'Connected' : 'Not connected'} />
-          <ReadRow label="Weather" value={!st.has_coordinates ? 'Needs service-area coordinates' : st.weather_error ? 'Error: ' + st.weather_error : st.storm_mode ? 'Storm mode' : 'Clear'} />
-          <ReadRow label="Book existing customers" value={st.book_existing_customers ? 'Yes' : 'No (flagged only)'} />
-          <ReadRow label="Waiting / failed (24h)" value={`${st.pending_events} waiting, ${st.failed_events} failed`} />
-        </>
-      )}
-      <ErrorLine text={error} />
-    </Card>
-  );
-};
-
-type Tab = 'overview' | 'conversations' | 'setup' | 'account' | 'activity';
+type Tab = 'overview' | 'conversations' | 'setup' | 'controls' | 'calendar' | 'billing' | 'account' | 'activity';
 
 const ClientDetailView: React.FC<{
   accountId: string;
@@ -1376,7 +1264,7 @@ const ClientDetailView: React.FC<{
       <button
         type="button"
         onClick={() => goto('/admin')}
-        className="inline-flex items-center gap-1.5 mt-6 text-xs font-['Space_Grotesk'] font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
+        className="inline-flex items-center gap-1.5 mt-6 text-xs font-display font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4 text-[#ffc174]" />
         All clients
@@ -1388,9 +1276,9 @@ const ClientDetailView: React.FC<{
         <RetryBlock text={error || 'Could not load this client.'} onRetry={() => load()} />
       ) : (
         <>
-          <div className="mt-5 mb-6">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="font-['Space_Grotesk'] text-3xl font-black uppercase tracking-tight text-slate-100 leading-none">
+          <div className="mb-8 mt-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="font-display text-3xl font-extrabold tracking-tight text-slate-100 leading-none">
                 {detail.account.name}
               </h1>
               <StatusChip status={detail.account.status} />
@@ -1408,12 +1296,15 @@ const ClientDetailView: React.FC<{
             </div>
           </div>
 
-          <div role="tablist" className="flex items-center gap-1 border-b border-[#1b2336] mb-6">
+          <div role="tablist" className="mb-8 flex items-center gap-1 overflow-x-auto border-b border-white/[0.06] [scrollbar-width:none]">
             {(
               [
                 ['overview', 'Overview'],
                 ['conversations', 'Conversations'],
                 ['setup', `Setup ${detail.steps.filter((s) => s.status === 'done').length}/${detail.steps.length}`],
+                ['controls', 'Controls'],
+                ['calendar', 'Calendar'],
+                ['billing', 'Billing'],
                 ['account', 'Account'],
                 ['activity', 'Activity'],
               ] as [Tab, string][]
@@ -1424,7 +1315,7 @@ const ClientDetailView: React.FC<{
                 role="tab"
                 aria-selected={tab === key}
                 onClick={() => setTab(key)}
-                className={`px-4 py-2.5 -mb-px border-b-2 font-['Space_Grotesk'] text-sm font-bold transition-colors cursor-pointer ${
+                className={`-mb-px shrink-0 cursor-pointer border-b-2 px-4 py-3.5 font-display text-[15px] font-semibold transition-colors ${
                   tab === key
                     ? 'border-[#f59e0b] text-slate-100'
                     : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -1437,7 +1328,7 @@ const ClientDetailView: React.FC<{
 
           {/* these two stay mounted so an open conversation survives switching tabs */}
           <div className={tab === 'overview' ? 'block space-y-4' : 'hidden'}>
-            <p className="font-['JetBrains_Mono'] text-xs text-slate-400">
+            <p className="font-data text-xs text-slate-400">
               {detail.counts.leads} leads · {detail.counts.unread} unread · {detail.counts.last7} in the last 7 days
             </p>
             <AdminOverview accountId={accountId} call={callAdmin} onDenied={onDenied} />
@@ -1448,18 +1339,17 @@ const ClientDetailView: React.FC<{
 
           {tab === 'setup' && <StepsPanel steps={detail.steps} onSave={saveStep} />}
 
+          {tab === 'controls' && <ControlsTab accountId={accountId} onDenied={onDenied} />}
+          {tab === 'calendar' && <CalendarTab accountId={accountId} onDenied={onDenied} />}
+          {tab === 'billing' && <BillingTab accountId={accountId} onDenied={onDenied} />}
+
           {tab === 'account' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-              <div className="space-y-5">
+            <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
+              <div className="space-y-8">
                 <DetailsCard detail={detail} onSaved={reload} onDenied={onDenied} />
                 <TerritoriesCard detail={detail} onChanged={reload} onDenied={onDenied} />
-                <Card title="Integrations" hint="Filled in during the GHL connection. Read-only here.">
-                  <ReadRow label="Texting number" value={detail.account.texting_number || ''} />
-                  <ReadRow label="Registration" value={detail.account.registration_status.replace(/_/g, ' ')} />
-                  <ReadRow label="GHL location" value={detail.account.ghl_location_id || ''} />
-                </Card>
               </div>
-              <div className="space-y-5">
+              <div className="space-y-8">
                 <OwnerCard detail={detail} onChanged={reload} onDenied={onDenied} />
                 <Card title="Business info" hint="The client edits these in their own Settings.">
                   <ReadRow label="Service area" value={detail.account.service_area || ''} />
@@ -1467,8 +1357,24 @@ const ClientDetailView: React.FC<{
                   <ReadRow label="Notification phone" value={detail.account.notification_phone || ''} />
                   <ReadRow label="Created" value={fmtDate(detail.account.created_at)} />
                 </Card>
-                <EngineCard accountId={detail.account.id} onDenied={onDenied} />
                 <StatusCard detail={detail} onChanged={reload} onDenied={onDenied} />
+                {detail.account.ghl_location_id && (
+                  <details className="group rounded-2xl border border-white/[0.07] bg-[#0f1424]">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-6 text-left sm:px-7">
+                      <span>
+                        <span className="block font-display text-lg font-semibold tracking-tight text-slate-100">Legacy connection</span>
+                        <span className="mt-1 block text-sm text-slate-400">GoHighLevel. No longer the main connection.</span>
+                      </span>
+                      <ChevronDown className="h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div className="space-y-4 border-t border-white/[0.06] p-6 sm:px-7">
+                      <p className="text-sm leading-relaxed text-slate-400">
+                        This client was set up through GoHighLevel. Texting now runs through the WedgeScale engine. The old connection is kept here for reference only.
+                      </p>
+                      <ReadRow label="GHL location" value={detail.account.ghl_location_id} />
+                    </div>
+                  </details>
+                )}
               </div>
             </div>
           )}
@@ -1482,7 +1388,7 @@ const ClientDetailView: React.FC<{
                   {detail.audit.map((a) => (
                     <li key={a.id} className="flex items-start justify-between gap-4 py-2.5 text-sm">
                       <span className="text-slate-300 min-w-0 break-words">{a.detail || a.action.replace(/_/g, ' ')}</span>
-                      <span className="font-['JetBrains_Mono'] text-[11px] text-slate-500 shrink-0 pt-0.5">{fmt(a.created_at)}</span>
+                      <span className="font-data text-[11px] text-slate-500 shrink-0 pt-0.5">{fmt(a.created_at)}</span>
                     </li>
                   ))}
                 </ul>
@@ -1531,12 +1437,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onSignOut, use
   const section: 'clients' | 'territories' = onTerritories ? 'territories' : 'clients';
 
   return (
-    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-['Inter']">
+    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-body">
       <div className="mx-auto max-w-6xl px-6 pt-5 pb-3 flex items-center justify-between gap-6">
         <div className="flex items-center gap-8">
-          <span className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight">
+          <span className="font-display text-lg font-bold text-slate-100 tracking-tight">
             WEDGE<span className="text-[#ffc174]">SCALE</span>{' '}
-            <span className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-[#ffc174] border border-[#ffc174]/40 rounded-md px-1.5 py-0.5 align-middle">
+            <span className="font-body text-[11px] tracking-wide text-[#ffc174] border border-[#ffc174]/40 rounded-md px-1.5 py-0.5 align-middle">
               Admin
             </span>
           </span>
@@ -1552,7 +1458,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onSignOut, use
                 type="button"
                 onClick={() => goto(path)}
                 aria-current={section === key ? 'page' : undefined}
-                className={`px-3 py-1.5 rounded-lg font-['Space_Grotesk'] text-sm font-bold transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg font-display text-sm font-bold transition-colors cursor-pointer ${
                   section === key ? 'bg-[#151b2b] text-slate-100' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >

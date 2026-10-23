@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, LogOut, RotateCcw } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { RotateCcw } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { NotFoundPage } from './NotFoundPage';
 import { DashboardBody, DashboardLead, DashboardStats, WindowKey } from '../components/DashboardBody';
 import { LeadStatus } from '../components/LeadStatusControl';
 import { buildChart } from '../lib/chart';
+import { AppHeader } from '../components/AppHeader';
 import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 import {
@@ -145,20 +146,9 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(selectedConversationId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const [windowKey, setWindowKey] = useState<WindowKey>('7d');
   const [isAdmin, setIsAdmin] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
-
-  /* close the account menu on outside click */
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
 
   useEffect(() => {
     setSelectedLeadId(selectedConversationId);
@@ -546,97 +536,30 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-['Inter']">
+    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-body">
           <PullIndicator pull={pull} lastUpdated={lastUpdated} />
-      {/* compact header */}
-      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-9 pt-5 pb-3 flex items-center justify-between gap-4">
-        <span className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight truncate">
-          {companyName}
-        </span>
-        <div className="flex items-center gap-3">
-  {accountStatus === 'setup' && (
-    <button
-      type="button"
-      onClick={() => (onNavigate ? onNavigate('/setup') : window.location.assign('/setup'))}
-      className="px-3 py-1.5 rounded-lg bg-[#1a1710] border border-[#f59e0b]/40 text-[#ffc174] font-['JetBrains_Mono'] text-[11px] uppercase tracking-wider cursor-pointer"
-    >
-      Setup progress
-    </button>
-  )}
-
-  <div className="hidden sm:flex items-center gap-2 font-['JetBrains_Mono'] text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-    <span className="h-1.5 w-1.5 rounded-full bg-[#ffc174] animate-pulse" />
-    <span>Refreshes every 60s</span>
-  </div>
-          <div className="relative" ref={menuRef}>
+      <AppHeader
+        companyName={companyName}
+        userEmail={userEmail}
+        current="dashboard"
+        isAdmin={isAdmin}
+        onNavigate={onNavigate}
+        onSignOut={onSignOut}
+        extra={
+          accountStatus === 'setup' ? (
             <button
               type="button"
-              onClick={() => setMenuOpen((v) => !v)}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#111728] border border-[#212b42] text-slate-300 text-xs"
-              aria-expanded={menuOpen}
+              onClick={() => (onNavigate ? onNavigate('/setup') : window.location.assign('/setup'))}
+              className="hidden h-11 cursor-pointer items-center rounded-xl border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-4 text-sm font-semibold text-[#ffc174] transition-colors hover:bg-[#f59e0b]/15 sm:inline-flex"
             >
-                            <span className="w-6 h-6 rounded-full bg-[#1e273d] border border-[#2d3a5a] flex items-center justify-center text-[11px] font-bold text-[#ffc174] shrink-0 sm:hidden">
-                {(userEmail || 'U').charAt(0).toUpperCase()}
-              </span>
-              <span className="max-w-[140px] truncate hidden sm:inline">{userEmail}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              Setup progress
             </button>
-              {menuOpen && (
-              <div className="absolute right-0 mt-2 w-52 rounded-xl bg-[#0f1422] border border-[#222c42] py-1.5 z-50">
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      if (onNavigate) onNavigate('/admin');
-                      else window.location.assign('/admin');
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-[#ffc174] hover:bg-[#192236] text-left"
-                  >
-                    Admin
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    if (onNavigate) onNavigate('/contacts');
-                    else window.location.assign('/contacts');
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-300 hover:text-white hover:bg-[#192236] text-left"
-                >
-                  Contacts
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    if (onNavigate) onNavigate('/settings');
-                    else window.location.assign('/settings');
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-300 hover:text-white hover:bg-[#192236] text-left"
-                >
-                  Settings
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onSignOut?.();
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-300 hover:text-red-400 hover:bg-[#192236] text-left"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  Sign out
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+          ) : null
+        }
+      />
 
       {loading ? (
-        <div className="py-24 text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-slate-400">
+        <div className="py-24 text-center font-body text-xs tracking-wide text-slate-400">
           Loading conversations…
         </div>
       ) : error ? (
@@ -645,7 +568,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
           <button
             type="button"
             onClick={() => loadLeads()}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#f59e0b] text-[#150f05] font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#f59e0b] text-[#150f05] font-display font-bold text-xs tracking-wide"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Retry

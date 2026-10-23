@@ -64,7 +64,7 @@ export const ContactTypeControl: React.FC<Props> = ({ type, needsReview, onChang
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Who is this? Currently ${TYPE_LABEL[type]}`}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-['Space_Grotesk'] text-xs sm:text-[13px] font-bold cursor-pointer transition-colors ${chipTone}`}
+        className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 font-display text-sm font-semibold cursor-pointer transition-colors ${chipTone}`}
       >
         <span>
           {TYPE_LABEL[type]}
@@ -80,7 +80,7 @@ export const ContactTypeControl: React.FC<Props> = ({ type, needsReview, onChang
             role="menu"
             className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[#222c42] bg-[#0f1422] p-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:mt-2 sm:w-72 sm:rounded-xl sm:border sm:p-1.5 sm:pb-1.5 sm:shadow-[0_12px_32px_rgba(0,0,0,0.65)]"
           >
-            <div className="px-3 pt-2 pb-1.5 font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+            <div className="px-3 pt-2 pb-1.5 font-body text-[11px] tracking-wide text-slate-500 font-semibold">
               Who is this?
             </div>
 
@@ -94,20 +94,20 @@ export const ContactTypeControl: React.FC<Props> = ({ type, needsReview, onChang
                 className="w-full flex items-center justify-between gap-3 px-3 py-3 sm:py-2 rounded-lg text-left hover:bg-[#192236] cursor-pointer disabled:opacity-50"
               >
                 <span className="min-w-0">
-                  <span className="block text-sm font-['Space_Grotesk'] font-bold text-slate-200">{TYPE_LABEL[t]}</span>
-                  <span className="block text-[11px] font-['JetBrains_Mono'] text-slate-500">{TYPE_HINT[t]}</span>
+                  <span className="block text-sm font-display font-bold text-slate-200">{TYPE_LABEL[t]}</span>
+                  <span className="block text-[11px] font-data text-slate-500">{TYPE_HINT[t]}</span>
                 </span>
                 {t === type && <Check className="w-4 h-4 text-[#ffc174] shrink-0" />}
               </button>
             ))}
 
             {error && (
-              <p role="alert" className="px-3 py-1.5 text-xs text-red-400 font-['Inter']">
+              <p role="alert" className="px-3 py-1.5 text-xs text-red-400 font-body">
                 {error}
               </p>
             )}
 
-            <div className="mt-1 border-t border-[#1b2336] px-3 pt-2.5 pb-1 font-['JetBrains_Mono'] text-[11px] text-slate-500 leading-snug">
+            <div className="mt-1 border-t border-[#1b2336] px-3 pt-2.5 pb-1 font-data text-[11px] text-slate-500 leading-snug">
               {needsReview
                 ? 'Sorted automatically. Tap a type to confirm it or change it.'
                 : type === 'unknown'

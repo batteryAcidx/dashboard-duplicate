@@ -133,11 +133,11 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
 const initial = (userEmail || 'U').charAt(0).toUpperCase();
 
   return (
-    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-['Inter']">
+    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-body">
           <PullIndicator pull={pull} />
       {/* compact header */}
       <div className="mx-auto max-w-3xl px-4 sm:px-6 pt-5 pb-3 flex items-center justify-between gap-4">
-        <span className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight truncate">
+        <span className="font-display text-lg font-bold text-slate-100 tracking-tight truncate">
           {companyName}
         </span>
         <div className="relative" ref={menuRef}>
@@ -196,7 +196,7 @@ const initial = (userEmail || 'U').charAt(0).toUpperCase();
         <button
           type="button"
           onClick={() => goto('/queue')}
-          className="inline-flex items-center gap-1.5 mt-3 -ml-1 pl-1 pr-3 py-2.5 text-sm font-['Space_Grotesk'] font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 mt-3 -ml-1 pl-1 pr-3 py-2.5 text-sm font-display font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 text-[#ffc174]" />
           Dashboard
@@ -218,7 +218,7 @@ const initial = (userEmail || 'U').charAt(0).toUpperCase();
             <button
               type="button"
               onClick={() => load()}
-              className="inline-flex items-center gap-1.5 px-5 py-3 rounded-xl bg-[#f59e0b] text-[#150f05] font-['Space_Grotesk'] font-bold text-sm uppercase tracking-wider cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-5 py-3 rounded-xl bg-[#f59e0b] text-[#150f05] font-display font-bold text-sm tracking-wide cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               Retry
@@ -226,7 +226,7 @@ const initial = (userEmail || 'U').charAt(0).toUpperCase();
           </div>
         ) : total === 0 ? (
           <div className="mt-8 w-full min-h-[240px] flex flex-col items-center justify-center text-center p-8 rounded-xl border border-dashed border-[#232839] bg-[#0c101d]/60">
-            <h2 className="font-['Space_Grotesk'] text-lg font-bold text-slate-200 tracking-tight mb-1">
+            <h2 className="font-display text-lg font-bold text-slate-200 tracking-tight mb-1">
               Your setup checklist is on its way
             </h2>
             <p className="text-sm text-slate-400 max-w-xs leading-relaxed">
@@ -241,10 +241,10 @@ const initial = (userEmail || 'U').charAt(0).toUpperCase();
           <>
             {/* Status header */}
             <div className="mt-5 mb-6">
-              <span className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#f59e0b] font-bold block mb-2">
-                SETUP
+              <span className="font-body text-xs tracking-wide text-[#f59e0b] font-bold block mb-2">
+                Setup
               </span>
-              <h1 className="font-['Space_Grotesk'] text-3xl sm:text-4xl font-black uppercase tracking-tight text-slate-100 leading-none">
+              <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-100 leading-none">
                 {isLive ? "You're live." : 'Getting you live.'}
               </h1>
               <p className="mt-3 text-base text-slate-300 leading-relaxed">
@@ -263,13 +263,13 @@ const initial = (userEmail || 'U').charAt(0).toUpperCase();
             {/* What we need from you */}
             {!isLive && waiting.length > 0 && (
               <div className="mb-6 p-4 sm:p-5 rounded-xl bg-[#1a1710] border border-[#f59e0b]/40">
-                <p className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#ffc174] font-bold mb-2.5">
+                <p className="font-body text-xs tracking-wide text-[#ffc174] font-bold mb-2.5">
                   {waiting.length === 1 ? 'We need one thing from you' : `We need ${waiting.length} things from you`}
                 </p>
                 <ul className="space-y-2.5">
                   {waiting.map((s) => (
                     <li key={s.id} className="text-[15px] text-slate-100 leading-relaxed">
-                      <span className="font-['Space_Grotesk'] font-bold">{s.title}.</span>{' '}
+                      <span className="font-display font-bold">{s.title}.</span>{' '}
                       {s.note && <span className="text-slate-300">{s.note}</span>}
                     </li>
                   ))}
@@ -292,11 +292,11 @@ const initial = (userEmail || 'U').charAt(0).toUpperCase();
                       <StepIcon status={s.status} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-x-3 gap-y-1.5 flex-wrap">
-                          <h2 className="font-['Space_Grotesk'] text-base sm:text-[17px] font-bold text-slate-100 tracking-tight">
+                          <h2 className="font-display text-base sm:text-[17px] font-bold text-slate-100 tracking-tight">
                             {s.title}
                           </h2>
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-['JetBrains_Mono'] uppercase tracking-wider font-semibold shrink-0 ${tag.cls}`}
+                            className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-body tracking-wide font-semibold shrink-0 ${tag.cls}`}
                           >
                             {tag.label}
                             {s.status === 'done' && s.completed_at ? ` · ${dateLabel(s.completed_at, tz)}` : ''}

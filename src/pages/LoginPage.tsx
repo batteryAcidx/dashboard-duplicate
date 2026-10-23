@@ -115,15 +115,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
-              <span className="font-['Space_Grotesk'] text-xl sm:text-3xl uppercase tracking-tight text-slate-100 font-black">
+              <span className="font-display text-xl sm:text-3xl tracking-tight text-slate-100 font-extrabold">
                 WEDGE<span className="text-[#ffc174]">SCALE</span>
               </span>
-              <span className="font-['JetBrains_Mono'] text-[10px] sm:text-sm font-bold uppercase tracking-widest text-[#ffc174] bg-[#252939] border border-[#ffc174]/40 px-2 sm:px-2.5 py-0.5 rounded-lg shadow-sm">
-                DASHBOARD
+              <span className="font-body text-[11px] sm:text-sm font-bold tracking-wide text-[#ffc174] bg-[#252939] border border-[#ffc174]/40 px-2 sm:px-2.5 py-0.5 rounded-lg shadow-sm">
+                Dashboard
               </span>
             </div>
 
-            <p className="font-['Inter'] text-xs sm:text-sm text-slate-400 mt-3 sm:mt-4 text-center max-w-sm leading-relaxed text-pretty">
+            <p className="font-body text-xs sm:text-sm text-slate-400 mt-3 sm:mt-4 text-center max-w-sm leading-relaxed text-pretty">
               Log in to see your live queue.
             </p>
           </div>
@@ -133,7 +133,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
             {errorMessage && (
               <div
                 role="alert"
-                className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-['Inter'] leading-relaxed shadow-sm"
+                className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-body leading-relaxed shadow-sm"
               >
                 {errorMessage}
               </div>
@@ -143,7 +143,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
             <div className="space-y-2 text-left">
               <label
                 htmlFor="login-email"
-                className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300"
+                className="block font-body text-xs font-bold tracking-[0.16em] text-slate-300"
               >
                 Email Address
               </label>
@@ -162,7 +162,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="contractor@roofingcompany.com"
-                  className="w-full pl-11 pr-4 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-base sm:text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 transition-colors"
+                  className="w-full pl-11 pr-4 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-base sm:text-sm font-body text-slate-100 placeholder:text-slate-600 transition-colors"
                 />
               </div>
             </div>
@@ -172,14 +172,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
               <div className="flex items-center justify-between pb-0.5">
                 <label
                   htmlFor="login-password"
-                  className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300"
+                  className="block font-body text-xs font-bold tracking-[0.16em] text-slate-300"
                 >
                   Password
                 </label>
                 <button
                   type="button"
                   onClick={handleForgotClick}
-                  className="font-['JetBrains_Mono'] text-[10px] sm:text-[11px] text-slate-400 hover:text-[#ffc174] transition-colors uppercase tracking-[0.16em] cursor-pointer"
+                  className="font-body text-[11px] sm:text-[11px] text-slate-400 hover:text-[#ffc174] transition-colors tracking-[0.16em] cursor-pointer"
                 >
                   Forgot?
                 </button>
@@ -195,7 +195,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-11 pr-11 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-xs sm:text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 transition-colors"
+                  className="w-full pl-11 pr-11 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-xs sm:text-sm font-body text-slate-100 placeholder:text-slate-600 transition-colors"
                 />
                 <button
                   type="button"
@@ -213,7 +213,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full inline-flex items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-['Space_Grotesk'] text-xs sm:text-base font-black uppercase tracking-widest text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60 disabled:opacity-50"
+                className="w-full inline-flex items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-display text-xs sm:text-base font-extrabold tracking-wide text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60 disabled:opacity-50"
               >
                 {isLoading ? 'SIGNING IN...' : 'LOG IN'}
               </button>
@@ -226,11 +226,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
       <div className="w-full text-center z-10 pt-8 pb-2 space-y-2">
         <a
           href="https://wedgescale.com"
-          className="inline-block font-['JetBrains_Mono'] text-xs text-slate-400 hover:text-[#ffc174] transition-colors uppercase tracking-[0.16em]"
+          className="inline-block font-body text-xs text-slate-400 hover:text-[#ffc174] transition-colors tracking-[0.16em]"
         >
           Back to wedgescale.com
         </a>
-        <p className="font-['JetBrains_Mono'] text-xs text-slate-500 uppercase tracking-widest">
+        <p className="font-body text-xs text-slate-500 tracking-wide">
           WedgeScale Dashboard Platform
         </p>
       </div>

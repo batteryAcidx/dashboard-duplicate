@@ -17,7 +17,7 @@ export const LeadDetailsCard: React.FC<Props> = ({ rows, why, urgency = 'normal'
     <div className="mb-5 rounded-xl bg-[#0e1322] border border-[#252939] p-4 space-y-3" aria-label="What we know">
       {flagged && (
         <div
-          className={`flex items-start gap-2 text-sm font-['Space_Grotesk'] font-bold ${
+          className={`flex items-start gap-2 text-sm font-display font-bold ${
             urgency === 'emergency' ? 'text-red-300' : 'text-[#ffc174]'
           }`}
         >
@@ -32,10 +32,10 @@ export const LeadDetailsCard: React.FC<Props> = ({ rows, why, urgency = 'normal'
       )}
 
       {why && (
-        <div className="flex items-start gap-2 text-sm text-slate-200 font-['Inter']">
+        <div className="flex items-start gap-2 text-sm text-slate-200 font-body">
           <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-slate-400 shrink-0" aria-hidden="true" />
           <span>
-            <span className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-500 mr-2">With you</span>
+            <span className="font-body text-[11px] tracking-wide text-slate-500 mr-2">With you</span>
             {why}
           </span>
         </div>
@@ -45,10 +45,10 @@ export const LeadDetailsCard: React.FC<Props> = ({ rows, why, urgency = 'normal'
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
           {rows.map((r) => (
             <div key={r.label} className="min-w-0">
-              <dt className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+              <dt className="font-body text-[11px] tracking-wide text-slate-500 font-semibold">
                 {r.label}
               </dt>
-              <dd className="text-sm text-slate-100 font-['Inter'] break-words">{r.value}</dd>
+              <dd className="text-sm text-slate-100 font-body break-words">{r.value}</dd>
             </div>
           ))}
         </dl>

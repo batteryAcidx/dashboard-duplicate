@@ -6,7 +6,9 @@
     padding: 0;
     background-color: #0e1322;
     color: #dee1f7;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     overflow-x: hidden;
     width: 100%;
     max-width: 100vw;
@@ -15,9 +17,12 @@
 }
 
 @theme {
-  --font-headline: "Space Grotesk", sans-serif;
-  --font-body: "Inter", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  /* The three type styles used everywhere: font-display (headings and buttons), font-body (text), font-data (numbers, phones, times) */
+  --font-display: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-data: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-headline: var(--font-display);
+  --font-mono: var(--font-data);
   --font-serif: "Newsreader", Georgia, serif;
 
   --color-surface: #0e1322;

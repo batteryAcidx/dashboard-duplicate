@@ -83,13 +83,13 @@ const money = (n: number) =>
 const actorSuffix = (a: string) => (a === 'owner' ? ' · by owner' : a === 'support' ? ' · by support' : ' · automatic');
 
 const btn =
-  "px-4 py-2 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50";
+  "px-4 py-2 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50";
 const ghost =
-  "px-4 py-2 rounded-lg bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-300 font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50";
+  "px-4 py-2 rounded-lg bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-300 font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50";
 const inputCls =
-  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg px-3 py-2.5 text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 disabled:opacity-60";
+  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg px-3 py-2.5 text-sm font-body text-slate-100 placeholder:text-slate-600 disabled:opacity-60";
 const labelCls =
-  "block font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-slate-400 font-semibold mb-1.5";
+  "block font-body text-[11px] tracking-wide text-slate-400 font-semibold mb-1.5";
 
 /* ---------- the edit panel ---------- */
 
@@ -281,7 +281,7 @@ const EditPanel: React.FC<EditPanelProps> = ({ lead, call, onDenied, onSaved }) 
       </div>
 
       {error && (
-        <p role="alert" className="text-xs text-red-400 font-['Inter']">
+        <p role="alert" className="text-xs text-red-400 font-body">
           {error}
         </p>
       )}
@@ -400,7 +400,7 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
         <button
           type="button"
           onClick={() => setThread(null)}
-          className="inline-flex items-center gap-1.5 text-xs font-['Space_Grotesk'] font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-xs font-display font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 text-[#ffc174]" />
           Back to the list
@@ -408,48 +408,48 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
 
         <div className="mt-4 pb-4 mb-4 border-b border-[#252939] space-y-1.5">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h3 className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight">
+            <h3 className="font-display text-lg font-bold text-slate-100 tracking-tight">
               {t.lead.name || 'Unnamed lead'}
             </h3>
             {t.lead.priority && (
-              <span className="px-2 py-0.5 rounded-md bg-[#141a29]/80 border border-white/[0.09] text-[10px] font-['JetBrains_Mono'] uppercase tracking-wider text-[#ffc174] font-semibold">
+              <span className="px-2 py-0.5 rounded-md bg-[#141a29]/80 border border-white/[0.09] text-[11px] font-body tracking-wide text-[#ffc174] font-semibold">
                 Priority
               </span>
             )}
-            <span className="px-2 py-0.5 rounded-md bg-[#151b2b] border border-[#2b354d] text-[10px] font-['JetBrains_Mono'] uppercase tracking-wider text-slate-300 font-semibold">
+            <span className="px-2 py-0.5 rounded-md bg-[#151b2b] border border-[#2b354d] text-[11px] font-body tracking-wide text-slate-300 font-semibold">
               {STATUS_LABEL[t.lead.status] || t.lead.status}
               {t.lead.status === 'won' && t.lead.final_value ? ` · ${money(Number(t.lead.final_value))}` : ''}
             </span>
           </div>
           <p className="text-xs sm:text-[13px] text-slate-300 leading-relaxed">
-            <span className="font-['JetBrains_Mono']">{t.lead.phone || 'No phone'}</span>
+            <span className="font-data">{t.lead.phone || 'No phone'}</span>
             {' · '}
             {t.lead.payment_type === 'out_of_pocket' ? 'Out of pocket' : t.lead.insurance_carrier || 'Insurance not given'}
             {place ? ` · ${place}` : ''}
           </p>
-          <p className="font-['JetBrains_Mono'] text-xs text-slate-400">
+          <p className="font-data text-xs text-slate-400">
             Job type: {JOB_OPTIONS.find(([v]) => v !== '' && v === toKey(t.lead.job_type))?.[1] || 'Not set'}
           </p>
           {t.appointments.length > 0 && (
-            <p className="font-['JetBrains_Mono'] text-xs text-[#ffc174]">
+            <p className="font-data text-xs text-[#ffc174]">
               {t.appointments.map((a) => `${whenLabel(a.starts_at, tz)} (${a.status})`).join(' · ')}
             </p>
           )}
           {(t.lead.opted_out || t.lead.automation_paused) && (
-            <p className="font-['JetBrains_Mono'] text-xs text-slate-400">
+            <p className="font-data text-xs text-slate-400">
               {t.lead.opted_out ? 'Opted out of texts' : ''}
               {t.lead.opted_out && t.lead.automation_paused ? ' · ' : ''}
               {t.lead.automation_paused ? 'Automation paused on this lead' : ''}
             </p>
           )}
-          <p className="font-['JetBrains_Mono'] text-[11px] text-slate-500">
+          <p className="font-data text-[11px] text-slate-500">
             Times are in {t.company ? `${t.company}'s` : 'the client\u2019s'} time zone ({tz}).
           </p>
         </div>
 
         {/* edit area */}
         <div className="mb-4 space-y-3">
-          {editNote && <p className="font-['JetBrains_Mono'] text-xs text-[#ffc174]">{editNote}</p>}
+          {editNote && <p className="font-data text-xs text-[#ffc174]">{editNote}</p>}
           {editOpen ? (
             <>
               <EditPanel key={editVersion} lead={t.lead} call={call} onDenied={onDenied} onSaved={handleSaved} />
@@ -475,7 +475,7 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
         <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
           {t.lead.missed_call_at && (
             <div className="flex items-center justify-center pb-1">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0a0e19] border border-[#232a3f] text-xs font-['JetBrains_Mono'] text-slate-400">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0a0e19] border border-[#232a3f] text-xs font-data text-slate-400">
                 <PhoneMissed className="w-3.5 h-3.5" />
                 <span>Missed call · {whenLabel(t.lead.missed_call_at, tz)}</span>
               </div>
@@ -483,7 +483,7 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
           )}
 
           {items.length === 0 && (
-            <p className="text-center font-['JetBrains_Mono'] text-xs text-slate-500 py-6">No messages yet.</p>
+            <p className="text-center font-data text-xs text-slate-500 py-6">No messages yet.</p>
           )}
 
           {items.map((it) => {
@@ -492,7 +492,7 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
             lastDay = k;
             const divider = showDay ? (
               <div className="flex items-center justify-center my-2">
-                <span className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-400 bg-[#0a0e19] border border-[#232a3f] px-3 py-0.5 rounded-full font-semibold">
+                <span className="font-body text-[11px] tracking-wide text-slate-400 bg-[#0a0e19] border border-[#232a3f] px-3 py-0.5 rounded-full font-semibold">
                   {dayLabel(it.at, tz)}
                 </span>
               </div>
@@ -503,7 +503,7 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
                 <React.Fragment key={`e-${it.e.id}`}>
                   {divider}
                   <div className="flex items-center justify-center">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#0a0e19] border border-[#232a3f] text-[11px] font-['JetBrains_Mono'] text-slate-500 text-center leading-snug">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#0a0e19] border border-[#232a3f] text-[11px] font-data text-slate-500 text-center leading-snug">
                       <span className={`h-1 w-1 rounded-full shrink-0 ${it.e.actor === 'system' ? 'bg-slate-500' : 'bg-[#ffc174]'}`} />
                       {it.e.detail || it.e.event_type.replace(/_/g, ' ')}
                       {actorSuffix(it.e.actor)} · {clock(it.at, tz)}
@@ -530,13 +530,13 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
                 >
                   <div className="flex items-center justify-between gap-3 mb-1 pb-1 border-b border-[#252b3d]/40">
                     <span
-                      className={`font-['JetBrains_Mono'] text-[11px] font-bold uppercase tracking-wider ${
+                      className={`font-body text-[11px] font-bold tracking-wide ${
                         isHomeowner ? 'text-[#ffc174]' : 'text-slate-400'
                       }`}
                     >
                       {label}
                     </span>
-                    <span className="font-['JetBrains_Mono'] text-[10.5px] text-slate-500">
+                    <span className="font-data text-[10.5px] text-slate-500">
                       {clock(m.sent_at, tz)}
                       {m.delivery_status === 'failed' ? ' · failed' : ''}
                     </span>
@@ -547,7 +547,7 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
                       {files.map((f) => (
                         <span
                           key={f.id}
-                          className="px-2 py-1 rounded-md bg-[#090d18] border border-[#262c3e] font-['JetBrains_Mono'] text-[10px] text-slate-300"
+                          className="px-2 py-1 rounded-md bg-[#090d18] border border-[#262c3e] font-data text-[11px] text-slate-300"
                         >
                           {f.file_name || 'Photo'} {mb(f.size_bytes)}
                         </span>
@@ -566,7 +566,7 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
   /* ---------- the card ---------- */
   return (
     <section className="p-5 sm:p-6 rounded-xl bg-[#111625] border border-[#22283a]">
-      <h2 className="font-['Space_Grotesk'] text-base sm:text-lg font-bold text-slate-100 tracking-tight">
+      <h2 className="font-display text-base sm:text-lg font-bold text-slate-100 tracking-tight">
         Conversations
       </h2>
       <p className="mt-1 text-xs sm:text-[13px] text-slate-400 leading-relaxed">
@@ -576,7 +576,7 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
 
       <div className="mt-4 space-y-4">
         {error && (
-          <p role="alert" className="text-xs text-red-400 font-['Inter']">
+          <p role="alert" className="text-xs text-red-400 font-body">
             {error}
           </p>
         )}
@@ -603,15 +603,15 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-['Space_Grotesk'] text-sm font-bold text-slate-100 truncate">
+                        <span className="font-display text-sm font-bold text-slate-100 truncate">
                           {l.name || 'Unnamed lead'}
                         </span>
                         {l.priority && (
-                          <span className="text-[9px] font-['JetBrains_Mono'] uppercase tracking-wider text-[#ffc174] border border-white/[0.09] rounded px-1.5 py-0.5">
+                          <span className="text-[11px] font-body tracking-wide text-[#ffc174] border border-white/[0.09] rounded px-1.5 py-0.5">
                             Priority
                           </span>
                         )}
-                        <span className="text-[9px] font-['JetBrains_Mono'] uppercase tracking-wider text-slate-400 border border-[#2b354d] rounded px-1.5 py-0.5">
+                        <span className="text-[11px] font-body tracking-wide text-slate-400 border border-[#2b354d] rounded px-1.5 py-0.5">
                           {STATUS_LABEL[l.status] || l.status}
                         </span>
                       </div>
@@ -619,7 +619,7 @@ export const AdminConversations: React.FC<Props> = ({ accountId, call, onDenied 
                         {[l.address, l.city].filter(Boolean).join(', ') || 'No address'}
                       </div>
                     </div>
-                    <div className="text-right shrink-0 font-['JetBrains_Mono'] text-[10.5px] text-slate-500">
+                    <div className="text-right shrink-0 font-data text-[10.5px] text-slate-500">
                       <div>{l.message_count} messages</div>
                       <div>{whenLabel(l.last_message_at || l.created_at, listTz)}</div>
                     </div>

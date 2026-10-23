@@ -6,6 +6,9 @@ import {
 } from '../src/lib/leadView.ts';
 import { formatPhone, parseContactCsv, toE164 } from '../src/lib/contacts.ts';
 import { formatBlock, zonedToUtc } from '../src/lib/tz.ts';
+import {
+  adminErrorText, centsToDollars, dollarsToCents, guaranteeView, hoursToText, parseHours, pauseLeft, pauseUntilIso, readiness,
+} from '../src/lib/adminTools.ts';
 
 const future = new Date(Date.now() + 86400000).toISOString();
 const past = new Date(Date.now() - 86400000).toISOString();
@@ -186,5 +189,78 @@ describe('time zones for blocked times', () => {
   });
   test('a block is shown in the account time zone', () => {
     assert.equal(formatBlock('2026-10-21T14:30:00Z', '2026-10-21T16:00:00Z', 'America/Chicago'), 'Wed, Oct 21, 9:30 AM to 11:00 AM');
+  });
+});
+
+
+describe('admin helpers', () => {
+  test('follow-up hours', () => {
+    assert.deepEqual(parseHours('4, 24, 72, 120, 168'), { ok: true, hours: [4, 24, 72, 120, 168] });
+    assert.deepEqual(parseHours('4 24;72'), { ok: true, hours: [4, 24, 72] });
+    assert.deepEqual(parseHours(''), { ok: true, hours: [] });
+    assert.equal(parseHours('4, 4').ok, false);
+    assert.equal(parseHours('24, 4').ok, false);
+    assert.equal(parseHours('0, 5').ok, false);
+    assert.equal(parseHours('1.5').ok, false);
+    assert.equal(parseHours('900').ok, false);
+    assert.equal(parseHours('abc').ok, false);
+    assert.equal(parseHours('1,2,3,4,5,6,7,8,9,10,11').ok, false);
+    assert.equal(hoursToText([4, 24, 72]), '4, 24, 72');
+    assert.equal(hoursToText(null), '');
+  });
+
+  test('money', () => {
+    assert.equal(centsToDollars(69700), '$697');
+    assert.equal(centsToDollars(69750), '$697.50');
+    assert.equal(centsToDollars(-69700), '-$697');
+    assert.equal(centsToDollars(123456700), '$1,234,567');
+    assert.equal(centsToDollars(0), '$0');
+    assert.equal(dollarsToCents('697'), 69700);
+    assert.equal(dollarsToCents('$1,250.50'), 125050);
+    assert.equal(dollarsToCents('-697'), -69700);
+    assert.equal(dollarsToCents('12.345'), null);
+    assert.equal(dollarsToCents('abc'), null);
+    assert.equal(dollarsToCents(''), null);
+    assert.equal(dollarsToCents('999999999'), null);
+  });
+
+  test('the guarantee in plain words', () => {
+    assert.deepEqual(guaranteeView({ status: 'met', booked: 3 }), { label: 'Met', tone: 'ok', detail: '3 inspections booked in the first 30 days.' });
+    assert.equal(guaranteeView({ status: 'in_progress', booked: 1, required: 2, days_left: 12 }).detail, '1 of 2 booked, 12 days left in the window.');
+    assert.equal(guaranteeView({ status: 'in_progress', booked: 0, required: 2, days_left: 1 }).detail, '0 of 2 booked, 1 day left in the window.');
+    const due = guaranteeView({ status: 'credit_due', booked: 1, calls_per_week: 8.2 });
+    assert.equal(due.tone, 'danger');
+    assert.match(due.detail, /The next month is free/);
+    assert.match(guaranteeView({ status: 'not_eligible', calls_per_week: 2.1 }).detail, /under the 6/);
+    assert.equal(guaranteeView({ status: 'not_started' }).label, 'Not started');
+    assert.equal(guaranteeView({ status: 'waived' }).label, 'Waived');
+  });
+
+  test('pauses', () => {
+    const now = new Date('2026-10-20T20:00:00Z').getTime();
+    assert.equal(pauseUntilIso(4, now), '2026-10-21T00:00:00.000Z');
+    assert.equal(pauseLeft('2026-10-20T22:15:00Z', now), '2h 15m left');
+    assert.equal(pauseLeft('2026-10-20T20:30:00Z', now), '30m left');
+    assert.equal(pauseLeft('2026-10-20T19:00:00Z', now), null, 'a finished pause shows nothing');
+    assert.equal(pauseLeft(null, now), null);
+  });
+
+  test('what blocks the engine from turning on', () => {
+    assert.equal(readiness({}).ready, false);
+    const all = readiness({ account_status: 'live', registration_status: 'approved', phone_number: '+12145550100', twilio_ready: true, forwarding_status: 'verified' });
+    assert.equal(all.ready, true);
+    const missing = readiness({ account_status: 'live', registration_status: 'pending', phone_number: '+12145550100', twilio_ready: true, forwarding_status: 'pending' });
+    assert.equal(missing.registrationApproved, false);
+    assert.equal(missing.forwardingVerified, false);
+    assert.equal(missing.accountLive, true);
+    assert.equal(missing.ready, false);
+  });
+
+  test('error messages are in plain words', () => {
+    assert.match(adminErrorText('mfa_required'), /authenticator code/);
+    assert.match(adminErrorText('not_ready'), /approved registration/);
+    assert.match(adminErrorText('new row for relation "x" violates check constraint "y"'), /not allowed/);
+    assert.match(adminErrorText('duplicate key value violates unique constraint'), /already in use/);
+    assert.match(adminErrorText('boom'), /Something went wrong/);
   });
 });

@@ -146,22 +146,27 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
   const inThreadOnPhone = dashboardTab === 'conversations' && mobileView === 'chat';
   const hasAddress = Boolean(selectedLead && selectedLead.address && selectedLead.address !== 'No address provided');
 
+  const StatCard: React.FC<{ label: string; value: string; note: string; gold?: boolean }> = ({ label, value, note, gold }) => (
+    <div className="rounded-2xl border border-white/[0.07] bg-[#0f1424] p-5 sm:p-6">
+      <span className="text-sm font-medium text-slate-400">{label}</span>
+      <div className={`mt-3 font-display text-3xl font-bold tracking-tight tabular-nums sm:text-[34px] ${gold ? 'text-[#ffc174]' : 'text-slate-100'}`}>
+        {value}
+      </div>
+      <span className="mt-1.5 block text-[13px] leading-snug text-slate-500">{note}</span>
+    </div>
+  );
+
   return (
-    <div className="max-w-5xl mx-auto w-full bg-[#0c101d]">
-      <div className="p-4 pb-10 sm:p-7 lg:p-9 space-y-4 sm:space-y-6 lg:space-y-8 lg:min-h-[560px] flex flex-col justify-start">
-        {/* Title row (optional, hidden on phones inside a conversation) */}
+    <div className="mx-auto w-full max-w-5xl bg-[#0c101d]">
+      <div className="flex flex-col justify-start space-y-6 p-5 pb-12 sm:space-y-8 sm:p-8 lg:min-h-[600px] lg:p-10">
         {!hideTitleRow && (
-          <div className={`items-center justify-between gap-4 pb-1 ${inThreadOnPhone ? 'hidden lg:flex' : 'flex'}`}>
+          <div className={`items-center justify-between gap-4 ${inThreadOnPhone ? 'hidden lg:flex' : 'flex'}`}>
             <div>
-              <h3 className="font-['Space_Grotesk'] text-2xl sm:text-3xl font-black uppercase text-slate-100 tracking-tight leading-none">
-                Dashboard
-              </h3>
-              <span className="font-['JetBrains_Mono'] text-[11px] sm:text-xs text-slate-400 font-medium tracking-wide mt-1 block">
-                {companyName}
-              </span>
+              <h3 className="font-display text-2xl font-extrabold tracking-tight text-slate-100 sm:text-3xl">Dashboard</h3>
+              <span className="mt-1 block text-sm text-slate-400">{companyName}</span>
             </div>
-            <div className="flex items-center gap-1.5 sm:gap-2 font-['JetBrains_Mono'] text-[10px] sm:text-[11px] lg:text-xs uppercase tracking-wider text-slate-400 font-semibold shrink-0">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#ffc174] animate-pulse shrink-0" />
+            <div className="flex shrink-0 items-center gap-2 text-sm text-slate-400">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ffc174]" />
               <span className="sm:hidden">{statusLabelShort ?? statusLabel}</span>
               <span className="hidden sm:inline">{statusLabel}</span>
             </div>
@@ -170,20 +175,20 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
 
         {/* Tabs (sticky on phones, hidden inside a conversation) */}
         <div
-          className={`sticky top-0 z-30 -mx-4 px-4 py-2 sm:-mx-7 sm:px-7 bg-[#0c101d] lg:static lg:mx-0 lg:px-0 lg:py-0 ${
+          className={`sticky top-0 z-30 -mx-5 bg-[#0c101d] px-5 py-2 sm:-mx-8 sm:px-8 lg:static lg:mx-0 lg:px-0 lg:py-0 ${
             inThreadOnPhone ? 'hidden lg:block' : 'block'
           }`}
         >
-          <div className="relative grid grid-cols-2 w-full p-1 rounded-xl bg-[#090d18] border border-[#232839]">
+          <div className="relative grid w-full grid-cols-2 rounded-2xl border border-white/[0.07] bg-[#090d18] p-1.5">
             <div
-              className={`absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-lg bg-[#151b2b] border border-[#2b354d] shadow-sm transition-transform duration-300 ease-out pointer-events-none ${
+              className={`pointer-events-none absolute bottom-1.5 left-1.5 top-1.5 w-[calc(50%-6px)] rounded-xl border border-white/[0.08] bg-[#161d30] transition-transform duration-300 ease-out ${
                 dashboardTab === 'overview' ? 'translate-x-0' : 'translate-x-full'
               }`}
             />
             <button
               type="button"
               onClick={() => setDashboardTab('overview')}
-              className={`relative z-10 w-full py-2.5 rounded-lg text-sm font-['Space_Grotesk'] font-bold text-center transition-colors duration-200 ${
+              className={`relative z-10 w-full cursor-pointer rounded-xl py-3 text-center font-display text-[15px] font-bold transition-colors duration-200 ${
                 dashboardTab === 'overview' ? 'text-slate-100' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -192,41 +197,32 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
             <button
               type="button"
               onClick={() => setDashboardTab('conversations')}
-              className={`relative z-10 w-full py-2.5 rounded-lg text-sm font-['Space_Grotesk'] font-bold text-center transition-colors duration-200 flex items-center justify-center gap-2 ${
-                dashboardTab === 'conversations' ? 'text-slate-100' : 'text-[#e6af6c] hover:text-[#ffc174]'
+              className={`relative z-10 flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-xl py-3 text-center font-display text-[15px] font-bold transition-colors duration-200 ${
+                dashboardTab === 'conversations' ? 'text-slate-100' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <span>Conversations</span>
-              <span
-                className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-['JetBrains_Mono'] transition-colors duration-200 whitespace-nowrap ${
-                  dashboardTab === 'conversations' ? 'bg-[#212a3f] text-[#ffc174]' : 'bg-[#212a3f]/70 text-[#ffc174]'
-                }`}
-              >
-                {unreadCount > 0 ? (
-                  unreadCount
-                ) : (
-                  <>
-                    <span className="sm:hidden">0</span>
-                    <span className="hidden sm:inline">all caught up</span>
-                  </>
-                )}
-              </span>
+              {unreadCount > 0 && (
+                <span className="inline-flex min-w-[22px] items-center justify-center rounded-full bg-[#f59e0b] px-1.5 py-0.5 text-xs font-bold text-[#150f05]">
+                  {unreadCount}
+                </span>
+              )}
             </button>
           </div>
         </div>
 
-        {/* TAB 1: Overview */}
+        {/* Overview */}
         {dashboardTab === 'overview' && (
-          <div className="flex-1 flex flex-col justify-start">
-            <div className="flex items-center justify-between gap-3 pb-3 text-slate-400 font-['JetBrains_Mono'] text-xs">
-              <span className="text-slate-400">{statsWindowLabel}</span>
+          <div className="flex flex-1 flex-col justify-start">
+            <div className="flex items-center justify-between gap-3 pb-5">
+              <span className="text-[15px] font-semibold text-slate-200">{statsWindowLabel}</span>
               {onWindowChange && windowKey && (
-                <div role="group" aria-label="Time window" className="inline-flex p-0.5 rounded-lg bg-[#090d18] border border-[#232839]">
+                <div role="group" aria-label="Time window" className="inline-flex rounded-xl border border-white/[0.07] bg-[#090d18] p-1">
                   {(
                     [
                       ['24h', '24h'],
-                      ['7d', '7d'],
-                      ['30d', '30d'],
+                      ['7d', '7 days'],
+                      ['30d', '30 days'],
                     ] as [WindowKey, string][]
                   ).map(([key, label]) => (
                     <button
@@ -234,10 +230,8 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                       type="button"
                       aria-pressed={windowKey === key}
                       onClick={() => onWindowChange(key)}
-                      className={`px-3.5 py-2 rounded-md font-['JetBrains_Mono'] text-xs font-semibold transition-colors cursor-pointer ${
-                        windowKey === key
-                          ? 'bg-[#151b2b] border border-[#2b354d] text-[#ffc174]'
-                          : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                      className={`cursor-pointer rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors ${
+                        windowKey === key ? 'bg-[#161d30] text-[#ffc174]' : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
                       {label}
@@ -247,82 +241,38 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
               )}
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5 py-1">
-              <div className="rounded-xl bg-[#0e1322] p-4 sm:p-5 border border-[#252939] flex flex-col justify-start">
-                <span className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
-                  RESPONSE SPEED
-                </span>
-                <div className="font-['Space_Grotesk'] text-2xl sm:text-3xl font-bold tracking-tight text-[#ffc174] tabular-nums mt-2 sm:mt-3 lg:mt-4">
-                  {stats.responseSpeed}
-                </div>
-                <span className="font-['Inter'] text-xs sm:text-[11.5px] text-slate-400 block mt-1">Average response time.</span>
-              </div>
-
-              <div className="rounded-xl bg-[#0e1322] p-4 sm:p-5 border border-[#252939] flex flex-col justify-start">
-                <span className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
-                  CALLS RESCUED
-                </span>
-                <div className="font-['Space_Grotesk'] text-2xl sm:text-3xl font-bold tracking-tight text-[#dee1f7] tabular-nums mt-2 sm:mt-3 lg:mt-4">
-                  {stats.callsRescued}
-                </div>
-                <span className="font-['Inter'] text-xs sm:text-[11.5px] text-slate-400 block mt-1">
-                  <span className="sm:hidden">Missed calls captured.</span>
-                  <span className="hidden sm:inline">Total missed calls captured.</span>
-                </span>
-              </div>
-
-              <div className="rounded-xl bg-[#0e1322] p-4 sm:p-5 border border-[#252939] flex flex-col justify-start">
-                <span className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
-                  PIPELINE VALUE
-                </span>
-                <div className="font-['Space_Grotesk'] text-2xl sm:text-3xl font-bold tracking-tight text-[#ffc174] tabular-nums mt-2 sm:mt-3 lg:mt-4">
-                  {stats.pipelineValue}
-                </div>
-                <span className="font-['Inter'] text-xs sm:text-[11.5px] text-slate-400 block mt-1">
-                  Based on your typical job values.
-                </span>
-              </div>
-
-              <div className="rounded-xl bg-[#0e1322] p-4 sm:p-5 border border-[#252939] flex flex-col justify-start">
-                <span className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-[#d8c3ad] font-medium">
-                  BOOKING RATE
-                </span>
-                <div className="font-['Space_Grotesk'] text-2xl sm:text-3xl font-bold tracking-tight text-[#ffc174] tabular-nums mt-2 sm:mt-3 lg:mt-4">
-                  {stats.bookingRate}
-                </div>
-                <span className="font-['Inter'] text-xs sm:text-[11.5px] text-slate-400 block mt-1">{stats.bookingDetail}</span>
-              </div>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-5">
+              <StatCard label="Response speed" value={stats.responseSpeed} note="Average time to reply" gold />
+              <StatCard label="Calls rescued" value={stats.callsRescued} note="Missed calls captured" />
+              <StatCard label="Pipeline value" value={stats.pipelineValue} note="From your typical job values" gold />
+              <StatCard label="Booking rate" value={stats.bookingRate} note={stats.bookingDetail} gold />
             </div>
 
             {chart && (
-              <div className="mt-4 lg:mt-5">
+              <div className="mt-6 lg:mt-8">
                 <OverviewChart chart={chart} />
               </div>
             )}
           </div>
         )}
 
-        {/* TAB 2: Conversations */}
+        {/* Conversations */}
         {dashboardTab === 'conversations' && (
-          <div className="pt-1 flex-1 flex flex-col min-h-0">
+          <div className="flex min-h-0 flex-1 flex-col">
             {leads.length === 0 ? (
-              <div className="w-full min-h-[300px] flex flex-col items-center justify-center text-center p-8 rounded-xl border border-dashed border-[#232839] bg-[#0c101d]/60">
-                <h4 className="font-['Space_Grotesk'] text-base font-bold text-slate-200 tracking-tight mb-1">
-                  No missed calls yet
-                </h4>
-                <p className="text-sm lg:text-xs text-slate-400 max-w-xs font-['Inter'] leading-relaxed">
-                  When someone misses you, they'll show up here.
-                </p>
+              <div className="flex min-h-[320px] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.09] p-10 text-center">
+                <h4 className="font-display text-lg font-bold tracking-tight text-slate-200">No missed calls yet</h4>
+                <p className="mt-2 max-w-xs text-sm leading-relaxed text-slate-400">When someone misses you, they will show up here.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-12 min-h-0 lg:min-h-[420px] gap-6 lg:gap-8 flex-1">
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-8 lg:min-h-[460px] lg:grid-cols-12 lg:gap-10">
                 {/* Left column: leads */}
-                <div className={`lg:col-span-5 space-y-3 lg:overflow-y-auto ${mobileView === 'chat' ? 'hidden lg:block' : 'block'}`}>
+                <div className={`space-y-3 lg:col-span-5 lg:overflow-y-auto ${mobileView === 'chat' ? 'hidden lg:block' : 'block'}`}>
                   {filterBarOn && (
                     <div
                       role="tablist"
                       aria-label="Filter conversations"
-                      className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 [scrollbar-width:none]"
+                      className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none]"
                     >
                       {visibleFilters(counts).map((f) => (
                         <button
@@ -331,191 +281,160 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                           role="tab"
                           aria-selected={activeFilter === f}
                           onClick={() => setFilter(f)}
-                          className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border font-['Space_Grotesk'] text-xs font-bold cursor-pointer transition-colors ${
+                          className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
                             activeFilter === f
-                              ? 'bg-[#151b2b] border-[#f59e0b]/50 text-[#ffc174]'
-                              : 'bg-[#0a0e19] border-[#232839] text-slate-400 hover:text-slate-200'
+                              ? 'border-[#f59e0b]/50 bg-[#f59e0b]/10 text-[#ffc174]'
+                              : 'border-white/[0.08] bg-transparent text-slate-400 hover:text-slate-200'
                           }`}
                         >
                           <span>{FILTER_LABEL[f]}</span>
-                          <span className="font-['JetBrains_Mono'] text-[10px] text-slate-500">{counts[f]}</span>
+                          <span className="text-xs text-slate-500">{counts[f]}</span>
                         </button>
                       ))}
                     </div>
                   )}
+
                   {visibleLeads.map((lead) => {
                     const isSelected = selectedLead !== null && lead.id === selectedLead.id;
+                    const type = typeOf(lead);
+                    const booked = lead.status === 'booked';
                     return (
                       <div
                         key={lead.id}
                         onClick={() => handleSelectLead(lead.id)}
-                        className={`group relative p-4 rounded-xl border transition-all cursor-pointer ${
+                        className={`group relative cursor-pointer rounded-2xl border p-5 transition-colors ${
                           isSelected
-                            ? 'lg:bg-[#181e2e] lg:border-[#f59e0b]/50 lg:shadow-[0_4px_24px_rgba(245,158,11,0.08)] bg-[#111625] hover:bg-[#151b2c] border-[#22283a]'
-                            : 'bg-[#111625] hover:bg-[#151b2c] border-[#22283a]'
+                            ? 'border-[#f59e0b]/45 bg-[#151b2d] lg:shadow-[0_8px_30px_rgba(245,158,11,0.07)]'
+                            : 'border-white/[0.06] bg-[#101524] hover:bg-[#131a2b]'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <div className="flex items-center gap-2 min-w-0">
-                                {lead.unread && (
-                                  <span
-                                    className="w-2.5 h-2.5 lg:w-2 lg:h-2 rounded-full bg-[#f59e0b] shrink-0 shadow-[0_0_8px_rgba(245,158,11,0.6)]"
-                                    title="Unread conversation"
-                                  />
-                                )}
-                                <span className="font-['Space_Grotesk'] text-base lg:text-[15px] font-bold text-slate-100 tracking-tight truncate block">
-                                  {lead.name}
-                                </span>
-                                <UrgencyBadge urgency={urgencyOf(lead)} />
-                              </div>
-                              <span className="text-[11px] lg:text-[10px] font-['JetBrains_Mono'] text-slate-500 shrink-0">
-                                {lead.timeAgo}
-                              </span>
-                            </div>
-
-                            <div className="text-[13px] lg:text-[12px] text-slate-400 font-['Inter'] mb-2.5">
-                              <span className="truncate block max-w-full text-slate-400/90">{lead.address}</span>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="inline-flex items-center gap-1 font-['JetBrains_Mono'] text-[11px] lg:text-[9.5px] font-medium text-slate-300 bg-[#171c2b] border border-[#272e42] px-2 py-0.5 rounded-full shrink-0">
-                                {lead.conversationTag.icon === 'photos' ? (
-                                  <Paperclip className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-slate-400" />
-                                ) : (
-                                  <Calendar className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-slate-400" />
-                                )}
-                                {lead.conversationTag.label}
-                              </span>
-                              {lead.secondaryTag && (
-                                <span className="inline-flex items-center gap-1 font-['JetBrains_Mono'] text-[11px] lg:text-[9px] font-medium text-slate-400 bg-[#141926] border border-[#242b3d] px-1.5 py-0.5 rounded-full shrink-0">
-                                  <Paperclip className="w-3 h-3 lg:w-2 lg:h-2 text-slate-400" />
-                                  {lead.secondaryTag.label}
-                                </span>
-                              )}
-                              {typeOf(lead) !== 'homeowner' && (
-                                <span
-                                  className={`inline-flex items-center font-['JetBrains_Mono'] text-[11px] lg:text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0 border ${
-                                    typeOf(lead) === 'unknown' || lead.needsReview
-                                      ? 'text-[#ffc174] bg-[#261d10] border-[#f59e0b]/40'
-                                      : 'text-slate-300 bg-[#141a29]/80 border-white/[0.09]'
-                                  }`}
-                                >
-                                  {TYPE_LABEL[typeOf(lead)]}
-                                  {lead.needsReview ? ' · review' : ''}
-                                </span>
-                              )}
-                              {lead.status !== 'booked' && (
-                                <span
-                                  className={`inline-flex items-center font-['JetBrains_Mono'] text-[11px] lg:text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0 border ${
-                                    lead.status === 'won'
-                                      ? 'text-[#ffc174] bg-[#ffc174]/10 border-[#ffc174]/30'
-                                      : 'text-slate-300 bg-[#141a29]/80 border-white/[0.09]'
-                                  }`}
-                                >
-                                  {STATUS_LABEL[lead.status]}
-                                </span>
-                              )}
-                            </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            {lead.unread && (
+                              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#f59e0b] shadow-[0_0_8px_rgba(245,158,11,0.6)]" title="Unread conversation" />
+                            )}
+                            <span className="block truncate font-display text-base font-bold tracking-tight text-slate-100">{lead.name}</span>
+                            <UrgencyBadge urgency={urgencyOf(lead)} />
                           </div>
-
-                          <div className="shrink-0 pl-1.5 flex items-center justify-center text-slate-500 group-hover:text-[#ffc174] transition-colors">
-                            <ChevronRight className="w-5 h-5 lg:w-4 lg:h-4 text-slate-500 group-hover:text-[#ffc174] group-hover:translate-x-0.5 transition-all" />
-                          </div>
+                          <span className="shrink-0 pt-0.5 text-xs text-slate-500">{lead.timeAgo}</span>
                         </div>
+
+                        <div className="mt-1.5 truncate text-sm text-slate-400">{lead.address}</div>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+                          <span className={`inline-flex items-center gap-1.5 text-[13px] font-medium ${booked ? 'text-[#ffc174]' : 'text-slate-400'}`}>
+                            {lead.conversationTag.icon === 'photos' ? <Paperclip className="h-3.5 w-3.5" /> : <Calendar className="h-3.5 w-3.5" />}
+                            {lead.conversationTag.label}
+                          </span>
+                          {type !== 'homeowner' && (
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                                type === 'unknown' || lead.needsReview
+                                  ? 'border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#ffc174]'
+                                  : 'border-white/[0.08] bg-white/[0.04] text-slate-300'
+                              }`}
+                            >
+                              {TYPE_LABEL[type]}
+                              {lead.needsReview ? ' · review' : ''}
+                            </span>
+                          )}
+                          {!booked && (
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                                lead.status === 'won'
+                                  ? 'border-[#ffc174]/30 bg-[#ffc174]/10 text-[#ffc174]'
+                                  : 'border-white/[0.08] bg-white/[0.04] text-slate-300'
+                              }`}
+                            >
+                              {STATUS_LABEL[lead.status]}
+                            </span>
+                          )}
+                        </div>
+
+                        <ChevronRight className="absolute right-4 top-1/2 hidden h-4 w-4 -translate-y-1/2 text-slate-600 transition-all group-hover:translate-x-0.5 group-hover:text-[#ffc174] lg:block" />
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Right column: thread */}
-                <div className={`lg:col-span-7 flex flex-col justify-start min-h-0 ${mobileView === 'list' ? 'hidden lg:flex' : 'flex'}`}>
+                {/* Right column: the conversation */}
+                <div className={`flex min-h-0 flex-col justify-start lg:col-span-7 ${mobileView === 'list' ? 'hidden lg:flex' : 'flex'}`}>
                   {selectedLead ? (
                     <div className="w-full">
                       {/* phones: a slim sticky bar with Back and the name */}
-                      <div className="lg:hidden sticky top-0 z-30 -mx-4 px-4 sm:-mx-7 sm:px-7 py-1 bg-[#0c101d]/95 backdrop-blur border-b border-[#1b2336] flex items-center gap-2">
+                      <div className="sticky top-0 z-30 -mx-5 flex items-center gap-2 border-b border-white/[0.06] bg-[#0c101d]/95 px-5 py-1 backdrop-blur sm:-mx-8 sm:px-8 lg:hidden">
                         <button
                           type="button"
                           onClick={handleBackToQueue}
                           aria-label="Back to queue"
-                          className="inline-flex items-center gap-1 -ml-2 pl-1 pr-3 py-3 text-sm font-['Space_Grotesk'] font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer shrink-0"
+                          className="-ml-2 inline-flex shrink-0 cursor-pointer items-center gap-1 py-3 pl-1 pr-3 font-display text-[15px] font-bold text-slate-300 transition-colors hover:text-[#ffc174]"
                         >
-                          <ChevronLeft className="w-5 h-5 text-[#ffc174]" />
+                          <ChevronLeft className="h-5 w-5 text-[#ffc174]" />
                           <span>Back</span>
                         </button>
-                        <span className="font-['Space_Grotesk'] text-base font-bold text-slate-100 tracking-tight truncate min-w-0">
-                          {selectedLead.name}
-                        </span>
+                        <span className="min-w-0 truncate font-display text-base font-bold tracking-tight text-slate-100">{selectedLead.name}</span>
                         <UrgencyBadge urgency={urgencyOf(selectedLead)} size="phone" />
                       </div>
 
-                      <div className="pt-4 lg:pt-0 pb-4 mb-5 border-b border-[#252939]">
-                        <div className="space-y-2 pt-0.5">
-                          {/* desktop: name and tag */}
-                          <div className="hidden lg:flex items-center gap-2.5 flex-wrap">
-                            <h3 className="font-['Space_Grotesk'] text-xl font-bold text-slate-100 tracking-tight">
-                              {selectedLead.name}
-                            </h3>
+                      <div className="mb-6 border-b border-white/[0.06] pb-6 pt-5 lg:pt-0">
+                        <div className="space-y-3">
+                          {/* desktop: name and badge */}
+                          <div className="hidden flex-wrap items-center gap-3 lg:flex">
+                            <h3 className="font-display text-2xl font-bold tracking-tight text-slate-100">{selectedLead.name}</h3>
                             <UrgencyBadge urgency={urgencyOf(selectedLead)} size="header" />
                           </div>
 
-                          <div className="flex flex-wrap items-center text-sm lg:text-[13px] text-slate-300 font-['Inter'] leading-relaxed">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] leading-relaxed text-slate-300 lg:text-sm">
                             {selectedLead.phone ? (
                               <a
                                 href={telHref(selectedLead.phone)}
-                                className="inline-block py-1 font-['JetBrains_Mono'] text-slate-100 lg:text-slate-200 font-medium underline decoration-[#ffc174]/40 underline-offset-4 lg:no-underline"
+                                className="inline-block py-1 font-data font-medium text-slate-100 underline decoration-[#ffc174]/40 underline-offset-4 lg:no-underline"
                               >
                                 {selectedLead.phone}
                               </a>
                             ) : (
                               <span className="text-slate-500">No phone</span>
                             )}
-                            <span className="inline-block w-1 h-1 rounded-full bg-slate-500 mx-2 shrink-0" aria-hidden="true" />
-                            <span className="text-slate-300 font-medium">{selectedLead.insurance}</span>
-                            <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-500 mx-2 shrink-0" aria-hidden="true" />
+                            <span className="hidden h-1 w-1 shrink-0 rounded-full bg-slate-600 sm:inline-block" aria-hidden="true" />
+                            <span className="text-slate-300">{selectedLead.insurance}</span>
+                            <span className="hidden h-1 w-1 shrink-0 rounded-full bg-slate-600 sm:inline-block" aria-hidden="true" />
                             {hasAddress ? (
                               <a
                                 href={mapsHref(selectedLead.address)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="block sm:inline w-full sm:w-auto py-1 sm:py-0 text-slate-300 lg:text-slate-400 underline decoration-[#ffc174]/40 underline-offset-4 lg:no-underline"
+                                className="block w-full py-1 text-slate-300 underline decoration-[#ffc174]/40 underline-offset-4 sm:inline sm:w-auto sm:py-0 lg:text-slate-400 lg:no-underline"
                               >
                                 {selectedLead.address}
                               </a>
                             ) : (
-                              <span className="text-slate-500 block sm:inline w-full sm:w-auto">{selectedLead.address}</span>
+                              <span className="block w-full text-slate-500 sm:inline sm:w-auto">{selectedLead.address}</span>
                             )}
                           </div>
 
-                          <div className="flex flex-col items-start gap-2 pt-0.5 sm:flex-row sm:items-center sm:justify-between">
-                            {selectedLead.scheduledTime ? (
-                              <div className="text-sm lg:text-[13px] text-[#ffc174] font-medium font-['JetBrains_Mono']">
-                                {selectedLead.scheduledTime}
-                              </div>
-                            ) : (
-                              <span />
+                          {selectedLead.scheduledTime && (
+                            <div className="pt-1 text-[15px] font-semibold text-[#ffc174] lg:text-sm">{selectedLead.scheduledTime}</div>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-2.5 pt-3">
+                            {onChangeType && (
+                              <ContactTypeControl
+                                key={`type-${selectedLead.id}`}
+                                type={typeOf(selectedLead)}
+                                needsReview={Boolean(selectedLead.needsReview)}
+                                onChange={(t) => onChangeType(selectedLead.id, t)}
+                              />
                             )}
-                            <div className="flex flex-wrap items-center gap-2">
-                              {onChangeType && (
-                                <ContactTypeControl
-                                  key={`type-${selectedLead.id}`}
-                                  type={typeOf(selectedLead)}
-                                  needsReview={Boolean(selectedLead.needsReview)}
-                                  onChange={(t) => onChangeType(selectedLead.id, t)}
-                                />
-                              )}
-                              {onChangeStatus && (
-                                <LeadStatusControl
-                                  key={selectedLead.id}
-                                  status={selectedLead.status}
-                                  finalValue={selectedLead.finalValue}
-                                  changedBy={selectedLead.statusChangedBy}
-                                  changedAtLabel={selectedLead.statusChangedLabel}
-                                  onChange={(s, v) => onChangeStatus(selectedLead.id, s, v)}
-                                />
-                              )}
-                            </div>
+                            {onChangeStatus && (
+                              <LeadStatusControl
+                                key={selectedLead.id}
+                                status={selectedLead.status}
+                                finalValue={selectedLead.finalValue}
+                                changedBy={selectedLead.statusChangedBy}
+                                changedAtLabel={selectedLead.statusChangedLabel}
+                                onChange={(s, v) => onChangeStatus(selectedLead.id, s, v)}
+                              />
+                            )}
                           </div>
                         </div>
                       </div>
@@ -528,18 +447,18 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                       />
 
                       {/* messages: page scroll on phones, a scroll box only on desktop */}
-                      <div className="space-y-3 lg:space-y-3.5 lg:max-h-[380px] lg:overflow-y-auto lg:pr-2 pb-6 lg:pb-5">
+                      <div className="space-y-4 pb-6 lg:max-h-[440px] lg:space-y-4 lg:overflow-y-auto lg:pb-5 lg:pr-2">
                         {selectedLead.missedCallTime && (
-                          <div className="flex items-center justify-center pt-0.5 pb-1">
-                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0a0e19] border border-[#232a3f] text-xs font-['JetBrains_Mono'] text-slate-400">
-                              <PhoneMissed className="w-3.5 h-3.5 text-slate-400" />
+                          <div className="flex items-center justify-center pb-1">
+                            <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.07] bg-[#0a0e19] px-3.5 py-1.5 text-xs font-medium text-slate-400">
+                              <PhoneMissed className="h-3.5 w-3.5 text-slate-500" />
                               <span>Missed call · {selectedLead.missedCallTime}</span>
                             </div>
                           </div>
                         )}
 
                         {selectedLead.chatTranscript.length === 0 && (
-                          <p className="text-center font-['JetBrains_Mono'] text-xs text-slate-500 py-6">Loading messages…</p>
+                          <p className="py-8 text-center text-sm text-slate-500">Loading messages…</p>
                         )}
 
                         {selectedLead.chatTranscript.map((msg, index) => {
@@ -547,19 +466,15 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                             return (
                               <React.Fragment key={index}>
                                 {msg.dayDivider && (
-                                  <div className="flex items-center justify-center my-3">
-                                    <span className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-400 bg-[#0a0e19] border border-[#232a3f] px-3 py-0.5 rounded-full font-semibold">
+                                  <div className="my-4 flex items-center justify-center">
+                                    <span className="rounded-full border border-white/[0.07] bg-[#0a0e19] px-3.5 py-1 text-xs font-semibold text-slate-400">
                                       {msg.dayDivider}
                                     </span>
                                   </div>
                                 )}
                                 <div className="flex items-center justify-center py-0.5">
-                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#0a0e19] border border-[#232a3f] text-[11px] font-['JetBrains_Mono'] text-slate-500 text-center leading-snug">
-                                    <span
-                                      className={`h-1 w-1 rounded-full shrink-0 ${
-                                        msg.eventActor === 'system' ? 'bg-slate-500' : 'bg-[#ffc174]'
-                                      }`}
-                                    />
+                                  <span className="inline-flex items-center gap-2 rounded-xl border border-white/[0.06] bg-[#0a0e19] px-3.5 py-1.5 text-center text-xs leading-snug text-slate-500">
+                                    <span className={`h-1 w-1 shrink-0 rounded-full ${msg.eventActor === 'system' ? 'bg-slate-500' : 'bg-[#ffc174]'}`} />
                                     <span>
                                       {msg.text}
                                       {msg.eventActor === 'system' ? ' · automatic' : ''} · {msg.time}
@@ -574,47 +489,41 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                           return (
                             <React.Fragment key={index}>
                               {msg.dayDivider && (
-                                <div className="flex items-center justify-center my-3">
-                                  <span className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-400 bg-[#0a0e19] border border-[#232a3f] px-3 py-0.5 rounded-full font-semibold">
+                                <div className="my-4 flex items-center justify-center">
+                                  <span className="rounded-full border border-white/[0.07] bg-[#0a0e19] px-3.5 py-1 text-xs font-semibold text-slate-400">
                                     {msg.dayDivider}
                                   </span>
                                 </div>
                               )}
                               <div
-                                className={`p-3.5 lg:p-4 leading-relaxed transition-all shadow-md ${
+                                className={`max-w-[90%] p-4 leading-relaxed lg:max-w-[88%] lg:p-5 ${
                                   isWedge
-                                    ? 'rounded-2xl rounded-tl-sm bg-[#111625] text-[#dee1f7] border border-[#252939] max-w-[88%] lg:max-w-[92%]'
-                                    : 'rounded-2xl rounded-tr-sm bg-[#ffc174]/[0.09] text-slate-100 ml-auto text-left border border-[#ffc174]/20 max-w-[88%] lg:max-w-[92%] shadow-sm'
+                                    ? 'rounded-2xl rounded-tl-md border border-white/[0.07] bg-[#111625] text-[#dee1f7]'
+                                    : 'ml-auto rounded-2xl rounded-tr-md border border-[#ffc174]/20 bg-[#ffc174]/[0.08] text-left text-slate-100'
                                 }`}
                               >
-                                <div className="flex items-center justify-between gap-3 mb-1.5 pb-1 border-b border-[#252b3d]/40">
-                                  <span
-                                    className={`font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-wider ${
-                                      isWedge ? 'text-slate-400 font-medium' : 'text-[#ffc174] font-semibold'
-                                    }`}
-                                  >
+                                <div className="mb-2 flex items-center justify-between gap-4">
+                                  <span className={`text-xs font-semibold ${isWedge ? 'text-slate-400' : 'text-[#ffc174]'}`}>
                                     {isWedge ? companyName : selectedLead.name.split(' ')[0]}
                                   </span>
-                                  <span className="font-['JetBrains_Mono'] text-[11px] text-slate-500">{msg.time}</span>
+                                  <span className="font-data text-xs text-slate-500">{msg.time}</span>
                                 </div>
 
-                                <p className="font-['Inter'] text-[15px] lg:text-[13.5px] leading-relaxed text-[#e2e8f0] break-words">
-                                  {msg.text}
-                                </p>
+                                <p className="break-words font-body text-[15px] leading-relaxed text-[#e2e8f0]">{msg.text}</p>
 
                                 {msg.hasAttachment && selectedLead.attachments && selectedLead.attachments.length > 0 && (
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2.5 pt-2.5 border-t border-[#252b3d]/40">
+                                  <div className="mt-3 grid grid-cols-1 gap-2 border-t border-white/[0.06] pt-3 sm:grid-cols-2">
                                     {selectedLead.attachments.map((att, i) => (
                                       <div
                                         key={i}
-                                        className="flex items-center gap-2 p-2 rounded-lg bg-[#090d18] border border-[#262c3e] hover:border-[#f59e0b]/40 transition-colors select-none"
+                                        className="flex select-none items-center gap-2.5 rounded-xl border border-white/[0.07] bg-[#090d18] p-2.5 transition-colors hover:border-[#f59e0b]/40"
                                       >
-                                        <div className="w-7 h-7 lg:w-6 lg:h-6 rounded-md bg-[#192236] border border-[#2b354d] flex items-center justify-center text-white shrink-0">
-                                          <ImageIcon className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-white" />
+                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-[#192236]">
+                                          <ImageIcon className="h-4 w-4 text-white" />
                                         </div>
-                                        <div className="min-w-0 flex-1 font-['JetBrains_Mono'] text-[11px] lg:text-[10px] leading-tight">
-                                          <span className="block text-slate-200 font-medium truncate">{att.name}</span>
-                                          <span className="text-slate-500 text-[10px] lg:text-[9px]">{att.size}</span>
+                                        <div className="min-w-0 flex-1 text-xs leading-tight">
+                                          <span className="block truncate font-medium text-slate-200">{att.name}</span>
+                                          <span className="text-slate-500">{att.size}</span>
                                         </div>
                                       </div>
                                     ))}
@@ -628,22 +537,18 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                       </div>
 
                       {threadFooter && (
-                        <div className="sticky bottom-0 z-20 -mx-4 px-4 sm:-mx-7 sm:px-7 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-[#0c101d]/95 backdrop-blur border-t border-[#1b2336] lg:static lg:mx-0 lg:px-0 lg:pb-0 lg:pt-4 lg:bg-transparent lg:backdrop-blur-none">
+                        <div className="sticky bottom-0 z-20 -mx-5 border-t border-white/[0.06] bg-[#0c101d]/95 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-8 sm:px-8 lg:static lg:mx-0 lg:bg-transparent lg:px-0 lg:pb-0 lg:pt-5 lg:backdrop-blur-none">
                           {threadFooter}
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="w-full h-full min-h-[360px] flex flex-col items-center justify-center text-center p-8 rounded-xl border border-dashed border-[#232839] bg-[#0c101d]/60">
-                      <div className="w-10 h-10 rounded-full bg-[#151b2c] border border-[#2a3248] flex items-center justify-center mb-3">
-                        <ChevronRight className="w-5 h-5 text-[#ffc174]" />
+                    <div className="flex h-full min-h-[380px] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.09] p-10 text-center">
+                      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.08] bg-[#151b2c]">
+                        <ChevronRight className="h-5 w-5 text-[#ffc174]" />
                       </div>
-                      <h4 className="font-['Space_Grotesk'] text-base font-bold text-slate-200 tracking-tight mb-1">
-                        Select a lead to read the conversation
-                      </h4>
-                      <p className="text-xs text-slate-400 max-w-xs font-['Inter'] leading-relaxed">
-                        Click any missed call on the left to see the full text thread and photos.
-                      </p>
+                      <h4 className="font-display text-lg font-bold tracking-tight text-slate-200">Pick a conversation</h4>
+                      <p className="mt-2 max-w-xs text-sm leading-relaxed text-slate-400">Choose a missed call on the left to read the thread and see the photos.</p>
                     </div>
                   )}
                 </div>

@@ -102,7 +102,7 @@ export const PullIndicator: React.FC<{ pull: PullState; lastUpdated?: number | n
           className={`h-4 w-4 text-[#ffc174] ${refreshing ? 'animate-spin' : ''}`}
           style={refreshing ? undefined : { transform: `rotate(${pull.distance * 3}deg)` }}
         />
-        <span className="font-['JetBrains_Mono'] text-xs text-slate-200">
+        <span className="font-data text-xs text-slate-200">
           {refreshing
             ? 'Refreshing…'
             : pull.status === 'ready'

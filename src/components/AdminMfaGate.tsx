@@ -11,17 +11,17 @@ interface EnrollData {
 }
 
 const inputCls =
-  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg px-3 py-3 text-lg text-center tracking-[0.4em] font-['JetBrains_Mono'] text-slate-100 placeholder:text-slate-600";
+  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg px-3 py-3 text-lg text-center tracking-[0.4em] font-data text-slate-100 placeholder:text-slate-600";
 
 const btn =
-  "px-4 py-2.5 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50";
+  "px-4 py-2.5 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50";
 
 const Shell: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="mx-auto max-w-md px-4 sm:px-6 pt-10 pb-20">
     <section className="p-5 sm:p-6 rounded-xl bg-[#111625] border border-[#22283a] space-y-4">
       <div className="flex items-center gap-2.5">
         <ShieldCheck className="w-5 h-5 text-[#ffc174]" />
-        <h1 className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight">{title}</h1>
+        <h1 className="font-display text-lg font-bold text-slate-100 tracking-tight">{title}</h1>
       </div>
       {children}
     </section>
@@ -139,7 +139,7 @@ export const AdminMfaGate: React.FC<Props> = ({ children, onDenied }) => {
 
   if (phase === 'checking') {
     return (
-      <div className="py-24 text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-slate-400">
+      <div className="py-24 text-center font-body text-xs tracking-wide text-slate-400">
         Checking your sign-in…
       </div>
     );
@@ -180,7 +180,7 @@ export const AdminMfaGate: React.FC<Props> = ({ children, onDenied }) => {
           className={inputCls}
         />
         {error && (
-          <p role="alert" className="text-xs text-red-400 font-['Inter'] leading-relaxed">
+          <p role="alert" className="text-xs text-red-400 font-body leading-relaxed">
             {error}
           </p>
         )}
@@ -210,10 +210,10 @@ export const AdminMfaGate: React.FC<Props> = ({ children, onDenied }) => {
             <img src={enroll.qr} alt="Two-factor setup QR code" className="w-44 h-44" />
           </div>
           <div>
-            <div className="font-['JetBrains_Mono'] text-[11px] uppercase tracking-widest text-slate-400 font-semibold mb-1.5">
+            <div className="font-body text-[11px] tracking-wide text-slate-400 font-semibold mb-1.5">
               Key (to type in by hand)
             </div>
-            <code className="block p-3 rounded-lg bg-[#090d18] border border-[#232839] text-xs text-slate-200 break-all select-all font-['JetBrains_Mono']">
+            <code className="block p-3 rounded-lg bg-[#090d18] border border-[#232839] text-xs text-slate-200 break-all select-all font-data">
               {enroll.secret}
             </code>
           </div>
@@ -233,7 +233,7 @@ export const AdminMfaGate: React.FC<Props> = ({ children, onDenied }) => {
             className={inputCls}
           />
           {error && (
-            <p role="alert" className="text-xs text-red-400 font-['Inter'] leading-relaxed">
+            <p role="alert" className="text-xs text-red-400 font-body leading-relaxed">
               {error}
             </p>
           )}

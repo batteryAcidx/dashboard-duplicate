@@ -146,7 +146,7 @@ begin
     set local role authenticated;
     res := public.admin_engine_status(acct);
     reset role;
-    if not (res ? 'engine_enabled' and res ? 'phone_number' and res ? 'twilio_ready' and res ? 'failed_events') then raise exception 'status is missing fields: %', res; end if;
+    if not ((res -> 'engine_enabled') is not null and (res -> 'phone_number') is not null and (res -> 'twilio_ready') is not null and (res -> 'failed_events') is not null) then raise exception 'status is missing fields: %', res; end if;
     r := array_append(r, 'PASS: an admin can read the engine status');
 
     caught := false;

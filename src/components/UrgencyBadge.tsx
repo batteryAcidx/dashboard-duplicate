@@ -16,13 +16,13 @@ export const UrgencyBadge: React.FC<Props> = ({ urgency, size = 'row' }) => {
     : 'bg-[#141a29]/80 border-white/[0.09] text-[#ffc174] shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]';
   const sizing =
     size === 'row'
-      ? 'px-1.5 py-0.5 text-[10px] lg:text-[9px]'
+      ? 'px-1.5 py-0.5 text-[11px] lg:text-[11px]'
       : size === 'header'
-      ? 'px-2 py-0.5 text-[10px]'
-      : 'px-1.5 py-0.5 text-[9px]';
+      ? 'px-2 py-0.5 text-[11px]'
+      : 'px-1.5 py-0.5 text-[11px]';
   return (
     <span
-      className={`inline-flex items-center rounded-md border font-['JetBrains_Mono'] uppercase tracking-wider font-semibold shrink-0 ${tone} ${sizing}`}
+      className={`inline-flex items-center rounded-md border font-body tracking-wide font-semibold shrink-0 ${tone} ${sizing}`}
     >
       {label}
     </span>

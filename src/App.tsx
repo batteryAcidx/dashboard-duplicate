@@ -153,7 +153,7 @@ export default function App() {
           <div className="w-12 h-12 rounded-2xl bg-[#252939] border border-[#f59e0b]/50 flex items-center justify-center shadow-sm">
             <div className="w-5 h-5 border-2 border-[#f59e0b] border-t-transparent rounded-full animate-spin" />
           </div>
-          <p className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-400 font-bold">
+          <p className="font-body text-xs tracking-wide text-slate-400 font-bold">
             Checking your link…
           </p>
         </div>
@@ -183,7 +183,7 @@ export default function App() {
   // Rule 1: NEVER redirect signed-out or signed-in users away from /set-password
   if (isSetPasswordPage) {
     return (
-      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
+      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
         <SetPasswordPage onNavigate={navigate} />
       </div>
     );
@@ -193,7 +193,7 @@ export default function App() {
   if (!isAuthenticated && (isQueuePage || isConversationsRoute || isSetupPage || isContactsPage || isAdminRoute)) { // SETUP
     window.history.replaceState({}, '', '/login');
     return (
-      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
+      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
         <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
       </div>
     );
@@ -203,7 +203,7 @@ export default function App() {
   if (isAuthenticated && isLoginPage) {
     window.history.replaceState({}, '', '/queue');
     return (
-      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
+      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
         <QueuePage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} />
       </div>
     );
@@ -213,7 +213,7 @@ export default function App() {
     if (!isAuthenticated && !isKnownPublicRoute && !isQueuePage && !isConversationsRoute && !isSetupPage && !isContactsPage && !isAdminRoute) { // SETUP
     window.history.replaceState({}, '', '/login');
     return (
-      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
+      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
         <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
       </div>
     );
@@ -221,7 +221,7 @@ export default function App() {
 
   // Render view
   return (
-    <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
       {isDirect404Preview ? (
         <NotFoundPage onNavigate={navigate} />
       ) : isForgotPasswordPage ? (
