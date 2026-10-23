@@ -7,6 +7,8 @@ import {
 import { formatPhone, parseContactCsv, toE164 } from '../src/lib/contacts.ts';
 import { formatBlock, zonedToUtc } from '../src/lib/tz.ts';
 import {
+  EMPTY_FILTERS, REFRESH_CHOICES, actionLabel, activityArgs, detectProblems, filtersActive, formatDuration, getRefreshSeconds, healthLevel, isStripeCustomerId,
+  pageInfo, percent, relativeTime, setRefreshSeconds, stripeCustomerUrl,
   adminErrorText, centsToDollars, dollarsToCents, guaranteeView, hoursToText, parseHours, pauseLeft, pauseUntilIso, readiness,
 } from '../src/lib/adminTools.ts';
 
@@ -262,5 +264,178 @@ describe('admin helpers', () => {
     assert.match(adminErrorText('new row for relation "x" violates check constraint "y"'), /not allowed/);
     assert.match(adminErrorText('duplicate key value violates unique constraint'), /already in use/);
     assert.match(adminErrorText('boom'), /Something went wrong/);
+  });
+});
+
+
+describe('activity log helpers', () => {
+  test('actions read like sentences', () => {
+    assert.equal(actionLabel('engine_on'), 'Engine turned on');
+    assert.equal(actionLabel('set_status'), 'Account status changed');
+    assert.equal(actionLabel('some_new_thing'), 'Some new thing');
+    assert.equal(actionLabel(''), 'Action');
+  });
+
+  test('page numbers', () => {
+    assert.deepEqual(pageInfo(53, 0, 25), { from: 1, to: 25, total: 53, page: 1, pages: 3, hasPrev: false, hasNext: true });
+    assert.deepEqual(pageInfo(53, 25, 25), { from: 26, to: 50, total: 53, page: 2, pages: 3, hasPrev: true, hasNext: true });
+    assert.deepEqual(pageInfo(53, 50, 25), { from: 51, to: 53, total: 53, page: 3, pages: 3, hasPrev: true, hasNext: false });
+    assert.deepEqual(pageInfo(0, 0, 25), { from: 0, to: 0, total: 0, page: 1, pages: 1, hasPrev: false, hasNext: false });
+  });
+
+  test('filters become function arguments, and the last day is included in full', () => {
+    assert.equal(filtersActive(EMPTY_FILTERS), false);
+    assert.equal(filtersActive({ ...EMPTY_FILTERS, search: '  ' }), false);
+    assert.equal(filtersActive({ ...EMPTY_FILTERS, action: 'engine_on' }), true);
+    const a = activityArgs('acct', { from: '2026-10-01', to: '2026-10-03', actor: 'u1', action: 'engine_on', search: ' leak ' }, 50, 25) as Record<string, string>;
+    assert.equal(a.p_account_id, 'acct');
+    assert.equal(a.p_actor, 'u1');
+    assert.equal(a.p_action, 'engine_on');
+    assert.equal(a.p_search, 'leak');
+    assert.equal(a.p_limit, 25 as unknown as string);
+    assert.equal(a.p_offset, 50 as unknown as string);
+    const from = new Date(a.p_from).getTime();
+    const to = new Date(a.p_to).getTime();
+    assert.equal(Math.round((to - from) / 86400000), 3, 'Oct 1 to Oct 3 inclusive is three days');
+    const none = activityArgs('acct', EMPTY_FILTERS, 0, 25) as Record<string, unknown>;
+    assert.deepEqual([none.p_from, none.p_to, none.p_actor, none.p_action, none.p_search], [null, null, null, null, null]);
+  });
+});
+
+const calmHealth = () => ({
+  window_days: 7,
+  messages: { inbound: 20, outbound: 22, delivered: 22, failed: 0, queued: 0 },
+  conversations: { started: 12, booked: 5, handed_off: 1, opted_out: 0 },
+  response: { avg_seconds: 45, slowest_seconds: 90, measured: 12 },
+  ai: { calls: 40, errors: 0, fallbacks: 1, blocked: 2, avg_latency_ms: 1100, input_tokens: 20000, output_tokens: 2400 },
+  engine: { pending: 0, failed: 0, last_inbound_at: null, last_outbound_at: null },
+  alerts: { sent: 6, failed: 0, pending: 0 },
+  calendar: { status: 'not_connected', last_synced_at: null, failed_writes: 0 },
+  weather: { last_error: null, fetched_at: null, storm_mode: false },
+  recent_errors: [],
+});
+const liveCtx = { engine_enabled: true, forwarding_status: 'verified', registration_status: 'approved' };
+
+describe('how the system is performing: what is wrong', () => {
+  test('a healthy client has nothing to report', () => {
+    const p = detectProblems(calmHealth(), liveCtx);
+    assert.deepEqual(p, []);
+    assert.equal(healthLevel(p), 'healthy');
+  });
+
+  test('an engine that is off or paused is only information', () => {
+    const off = detectProblems(calmHealth(), { engine_enabled: false });
+    assert.deepEqual(off.map((x) => x.level), ['info']);
+    assert.equal(healthLevel(off), 'healthy');
+    const paused = detectProblems(calmHealth(), { ...liveCtx, paused_until: new Date(Date.now() + 3600000).toISOString() });
+    assert.equal(paused[0].title, 'The engine is paused');
+    const test = detectProblems(calmHealth(), { ...liveCtx, test_mode: true });
+    assert.equal(test[0].title, 'Test mode is on');
+  });
+
+  test('a live engine with forwarding or registration missing is critical', () => {
+    const p = detectProblems(calmHealth(), { engine_enabled: true, forwarding_status: 'pending', registration_status: 'pending' });
+    assert.deepEqual(p.map((x) => x.title), ['Call forwarding is not verified', 'The texting registration is not approved']);
+    assert.equal(healthLevel(p), 'problem');
+  });
+
+  test('texts that do not arrive, and an owner who is not told, are the worst problems', () => {
+    const h = calmHealth();
+    h.messages.failed = 3;
+    h.alerts.failed = 2;
+    const p = detectProblems(h, liveCtx);
+    assert.equal(p[0].level, 'critical');
+    assert.ok(p.some((x) => x.title === 'The owner is not being told'));
+    assert.ok(p.some((x) => /3 texts were not delivered/.test(x.title)));
+    const one = calmHealth();
+    one.messages.outbound = 100;
+    one.messages.failed = 1;
+    const w = detectProblems(one, liveCtx);
+    assert.equal(w[0].level, 'warning', 'one failure in 100 is only a warning');
+    assert.match(w[0].title, /1 text was not delivered/);
+  });
+
+  test('AI trouble only counts once there is enough to judge', () => {
+    const few = calmHealth();
+    few.ai = { ...few.ai, calls: 5, errors: 5 };
+    assert.deepEqual(detectProblems(few, liveCtx), []);
+    const bad = calmHealth();
+    bad.ai = { ...bad.ai, calls: 20, errors: 4, fallbacks: 0 };
+    assert.equal(detectProblems(bad, liveCtx)[0].title, 'The AI is failing often');
+    const fb = calmHealth();
+    fb.ai = { ...fb.ai, calls: 20, errors: 0, fallbacks: 5 };
+    assert.equal(detectProblems(fb, liveCtx)[0].title, 'The AI is falling back to fixed messages');
+    const blocked = calmHealth();
+    blocked.ai = { ...blocked.ai, calls: 20, blocked: 8 };
+    assert.match(detectProblems(blocked, liveCtx)[0].title, /blocked by the safety checks/);
+  });
+
+  test('slow replies, a stuck queue, a quiet engine and calendar trouble', () => {
+    const slow = calmHealth();
+    slow.response = { avg_seconds: 400, slowest_seconds: 900, measured: 6 };
+    assert.match(detectProblems(slow, liveCtx)[0].detail, /7 minutes/);
+    const stuck = calmHealth();
+    stuck.engine.pending = 50;
+    assert.equal(detectProblems(stuck, liveCtx)[0].title, 'Texts are piling up');
+    const quiet = calmHealth();
+    quiet.messages.outbound = 0;
+    assert.match(detectProblems(quiet, liveCtx)[0].title, /no texts went out/);
+    const cal = calmHealth();
+    cal.calendar = { status: 'needs_reauth', last_synced_at: null, failed_writes: 2 };
+    const titles = detectProblems(cal, liveCtx).map((x) => x.title);
+    assert.ok(titles.some((t) => /sign in again/.test(t)));
+    assert.ok(titles.some((t) => /2 bookings could not be written/.test(t)));
+  });
+
+  test('problems are listed worst first', () => {
+    const h = calmHealth();
+    h.weather.last_error = 'NWS 503';
+    h.engine.failed = 1;
+    h.alerts.failed = 1;
+    assert.deepEqual(detectProblems(h, liveCtx).map((x) => x.level), ['critical', 'warning', 'info']);
+  });
+
+  test('numbers for the cards', () => {
+    assert.equal(percent(22, 22), '100%');
+    assert.equal(percent(1, 3), '33%');
+    assert.equal(percent(0, 0), '—');
+    assert.equal(formatDuration(0), '—');
+    assert.equal(formatDuration(45), '45s');
+    assert.equal(formatDuration(125), '2m 5s');
+    assert.equal(formatDuration(180), '3m');
+    assert.equal(formatDuration(3900), '1h 5m');
+  });
+});
+
+describe('staying in sync, and Stripe links', () => {
+  test('the refresh setting defaults to a minute and ignores nonsense', () => {
+    assert.equal(getRefreshSeconds({ getItem: () => null }), 60);
+    assert.equal(getRefreshSeconds({ getItem: () => '30' }), 30);
+    assert.equal(getRefreshSeconds({ getItem: () => '0' }), 0);
+    assert.equal(getRefreshSeconds({ getItem: () => '7' }), 60);
+    assert.equal(getRefreshSeconds({ getItem: () => { throw new Error('blocked'); } }), 60);
+    let saved = '';
+    setRefreshSeconds(300, { setItem: (_k, v) => { saved = v; } });
+    assert.equal(saved, '300');
+    assert.equal(REFRESH_CHOICES.length, 4);
+  });
+
+  test('"updated" text', () => {
+    const now = 1_000_000_000_000;
+    assert.equal(relativeTime(now - 3000, now), 'just now');
+    assert.equal(relativeTime(now - 25000, now), '25s ago');
+    assert.equal(relativeTime(now - 5 * 60000, now), '5 min ago');
+    assert.equal(relativeTime(now - 3 * 3600000, now), '3 h ago');
+    assert.equal(relativeTime(new Date(now - 2 * 86400000).toISOString(), now), '2 d ago');
+    assert.equal(relativeTime(null, now), 'Never');
+  });
+
+  test('Stripe customer ids and links', () => {
+    assert.equal(isStripeCustomerId('cus_NffrFeUfNV2Hib'), true);
+    assert.equal(isStripeCustomerId(' cus_NffrFeUfNV2Hib '), true);
+    assert.equal(isStripeCustomerId('cust_123'), false);
+    assert.equal(isStripeCustomerId('cus_12'), false);
+    assert.equal(isStripeCustomerId(''), false);
+    assert.equal(stripeCustomerUrl('cus_abc123456'), 'https://dashboard.stripe.com/customers/cus_abc123456');
   });
 });

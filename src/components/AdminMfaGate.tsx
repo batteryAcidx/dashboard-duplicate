@@ -11,29 +11,53 @@ interface EnrollData {
 }
 
 const inputCls =
-  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg px-3 py-3 text-lg text-center tracking-[0.4em] font-data text-slate-100 placeholder:text-slate-600";
+  "w-full h-16 rounded-xl bg-[#0a0f1d] border border-white/[0.1] focus:border-[#f59e0b]/70 focus:ring-2 focus:ring-[#f59e0b]/15 outline-none px-4 text-2xl text-center tracking-[0.5em] font-data text-slate-100 placeholder:text-slate-700";
 
 const btn =
-  "px-4 py-2.5 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50";
+  "inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-display font-bold text-sm cursor-pointer transition-colors disabled:opacity-50";
+
+/** Before the code is entered this is ALL anyone sees: the name, a way out, and the check. No navigation. */
+const Frame: React.FC<{ userEmail?: string; onSignOut?: () => void; children: React.ReactNode }> = ({ userEmail, onSignOut, children }) => (
+  <div className="min-h-screen w-full bg-[#090e1c] font-body text-[#dee1f7]">
+    <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 pb-4 pt-5 sm:px-8">
+      <span className="font-display text-lg font-extrabold tracking-tight text-slate-100">
+        WEDGE<span className="text-[#ffc174]">SCALE</span>
+      </span>
+      {onSignOut && (
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="cursor-pointer rounded-xl border border-white/[0.08] px-4 py-2.5 text-sm font-medium text-slate-400 transition-colors hover:text-slate-200"
+        >
+          Sign out
+        </button>
+      )}
+    </header>
+    <div className="mx-auto max-w-md px-5 pb-20 pt-10 sm:px-6">
+      {userEmail && <p className="mb-5 truncate text-center text-sm text-slate-500">Signed in as {userEmail}</p>}
+      {children}
+    </div>
+  </div>
+);
 
 const Shell: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="mx-auto max-w-md px-4 sm:px-6 pt-10 pb-20">
-    <section className="p-5 sm:p-6 rounded-xl bg-[#111625] border border-[#22283a] space-y-4">
-      <div className="flex items-center gap-2.5">
-        <ShieldCheck className="w-5 h-5 text-[#ffc174]" />
-        <h1 className="font-display text-lg font-bold text-slate-100 tracking-tight">{title}</h1>
-      </div>
-      {children}
-    </section>
-  </div>
+  <section className="space-y-6 rounded-2xl border border-white/[0.07] bg-[#0f1424] p-7">
+    <div className="flex items-center gap-3">
+      <ShieldCheck className="h-5 w-5 text-[#ffc174]" />
+      <h1 className="font-display text-xl font-bold tracking-tight text-slate-100">{title}</h1>
+    </div>
+    {children}
+  </section>
 );
 
 interface Props {
   children: React.ReactNode;
   onDenied: () => void;
+  userEmail?: string;
+  onSignOut?: () => void;
 }
 
-export const AdminMfaGate: React.FC<Props> = ({ children, onDenied }) => {
+export const AdminMfaGate: React.FC<Props> = ({ children, onDenied, userEmail, onSignOut }) => {
   const [phase, setPhase] = useState<Phase>('checking');
   const [factorId, setFactorId] = useState('');
   const [enroll, setEnroll] = useState<EnrollData | null>(null);
@@ -137,16 +161,18 @@ export const AdminMfaGate: React.FC<Props> = ({ children, onDenied }) => {
 
   if (phase === 'ok') return <>{children}</>;
 
+  const framed = (node: React.ReactNode) => (
+    <Frame userEmail={userEmail} onSignOut={onSignOut}>
+      {node}
+    </Frame>
+  );
+
   if (phase === 'checking') {
-    return (
-      <div className="py-24 text-center font-body text-xs tracking-wide text-slate-400">
-        Checking your sign-in…
-      </div>
-    );
+    return framed(<div className="py-16 text-center text-sm text-slate-400">Checking your sign-in…</div>);
   }
 
   if (phase === 'error') {
-    return (
+    return framed(
       <Shell title="Two-factor check">
         <p role="alert" className="text-sm text-slate-300 leading-relaxed">
           {error}
@@ -159,7 +185,7 @@ export const AdminMfaGate: React.FC<Props> = ({ children, onDenied }) => {
   }
 
   if (phase === 'verify') {
-    return (
+    return framed(
       <Shell title="Enter your code">
         <p className="text-sm text-slate-400 leading-relaxed">
           Open your authenticator app and enter the 6-digit code for WedgeScale Admin.
@@ -192,7 +218,7 @@ export const AdminMfaGate: React.FC<Props> = ({ children, onDenied }) => {
   }
 
   // phase === 'enroll'
-  return (
+  return framed(
     <Shell title="Set up two-factor sign-in">
       <ol className="space-y-2 text-sm text-slate-300 leading-relaxed list-decimal pl-5">
         <li>Open an authenticator app (Google Authenticator, 1Password, Authy or similar).</li>

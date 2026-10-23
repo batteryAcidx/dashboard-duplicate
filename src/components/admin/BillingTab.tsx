@@ -1,189 +1,253 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Button, Card, Chip, Field, Notice, Row, inputCls } from '../ui';
-import { adminErrorText, centsToDollars, dollarsToCents, guaranteeView } from '../../lib/adminTools';
+import { Updated } from '../Updated';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
+import { INVOICE_LABEL, SUBSCRIPTION_LABEL, adminErrorText, centsToDollars, guaranteeView, isStripeCustomerId, relativeTime, stripeCustomerUrl } from '../../lib/adminTools';
 import type { Guarantee } from '../../lib/adminTools';
 
-interface Invoice {
+export interface StripeInvoice {
   id: string;
-  issued_on: string;
-  kind: string;
-  amount_cents: number;
+  number: string | null;
   status: string;
-  paid_on: string | null;
-  note: string | null;
+  amount_due_cents: number;
+  amount_paid_cents: number;
+  currency: string;
+  hosted_invoice_url: string | null;
+  issued_at: string | null;
+  paid_at: string | null;
 }
 
 export interface Billing {
   exists: boolean;
+  linked: boolean;
   plan: string;
   monthly_price_cents: number;
-  setup_fee_cents: number;
   status: string;
-  billing_email: string | null;
-  payment_method: string;
   go_live_at: string | null;
-  next_invoice_on: string | null;
   guarantee_override: string | null;
   notes: string | null;
+  stripe: {
+    customer_id: string | null;
+    subscription_id: string | null;
+    status: string | null;
+    price_label: string | null;
+    current_period_end: string | null;
+    cancel_at_period_end: boolean;
+    payment_method: string | null;
+    synced_at: string | null;
+  };
   paid_cents: number;
-  pending_cents: number;
-  invoices: Invoice[];
+  open_cents: number;
+  invoices: StripeInvoice[];
   guarantee: Guarantee & { go_live_at?: string; window_end?: string };
 }
 
-const STATUS_OPTIONS: [string, string][] = [['trial', 'Trial'], ['active', 'Active'], ['past_due', 'Past due'], ['paused', 'Paused'], ['canceled', 'Canceled']];
-const METHOD_OPTIONS: [string, string][] = [['manual', 'Manual'], ['card', 'Card'], ['ach', 'Bank transfer'], ['invoice', 'Invoice']];
-const KIND_OPTIONS: [string, string][] = [['monthly', 'Monthly fee'], ['setup', 'Setup fee'], ['credit', 'Credit'], ['adjustment', 'Adjustment']];
-const statusTone = (s: string): 'ok' | 'gold' | 'danger' | 'plain' => (s === 'active' ? 'ok' : s === 'past_due' ? 'danger' : s === 'trial' ? 'gold' : 'plain');
-const dayText = (d: string | null) => (d ? new Date(d.length === 10 ? d + 'T12:00:00' : d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Not set');
-
-const Sel: React.FC<{ id: string; value: string; onChange: (v: string) => void; options: [string, string][] }> = ({ id, value, onChange, options }) => (
-  <select id={id} value={value} onChange={(e) => onChange(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls}>
-    {options.map(([v, l]) => (
-      <option key={v} value={v}>{l}</option>
-    ))}
-  </select>
-);
+const statusTone = (s: string | null): 'ok' | 'gold' | 'danger' | 'plain' =>
+  s === 'active' ? 'ok' : s === 'trialing' ? 'gold' : s === 'past_due' || s === 'unpaid' ? 'danger' : 'plain';
+const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Not set');
 
 export const BillingTab: React.FC<{ accountId: string; onDenied: () => void; initial?: Billing }> = ({ accountId, onDenied, initial }) => {
   const [b, setB] = useState<Billing | null>(initial ?? null);
+  const [customer, setCustomer] = useState('');
+  const [goLive, setGoLive] = useState(initial?.go_live_at ? initial.go_live_at.slice(0, 10) : '');
+  const [override, setOverride] = useState(initial?.guarantee_override ?? '');
+  const [notes, setNotes] = useState(initial?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-
-  // plan form
-  const [plan, setPlan] = useState(initial?.plan ?? '');
-  const [monthly, setMonthly] = useState(initial ? String(initial.monthly_price_cents / 100) : '');
-  const [setup, setSetup] = useState(initial ? String(initial.setup_fee_cents / 100) : '');
-  const [status, setStatus] = useState(initial?.status ?? 'trial');
-  const [method, setMethod] = useState(initial?.payment_method ?? 'manual');
-  const [email, setEmail] = useState(initial?.billing_email ?? '');
-  const [nextOn, setNextOn] = useState(initial?.next_invoice_on ?? '');
-  const [goLive, setGoLive] = useState(initial?.go_live_at ? initial.go_live_at.slice(0, 10) : '');
-  const [notes, setNotes] = useState(initial?.notes ?? '');
-  const [override, setOverride] = useState(initial?.guarantee_override ?? '');
-  // invoice form
-  const [kind, setKind] = useState('monthly');
-  const [amount, setAmount] = useState('');
-  const [issued, setIssued] = useState('');
-  const [invStatus, setInvStatus] = useState('pending');
-  const [invNote, setInvNote] = useState('');
-
-  const apply = (data: Billing) => {
-    setB(data);
-    setPlan(data.plan);
-    setMonthly(String(data.monthly_price_cents / 100));
-    setSetup(String(data.setup_fee_cents / 100));
-    setStatus(data.status);
-    setMethod(data.payment_method);
-    setEmail(data.billing_email ?? '');
-    setNextOn(data.next_invoice_on ?? '');
-    setGoLive(data.go_live_at ? data.go_live_at.slice(0, 10) : '');
-    setNotes(data.notes ?? '');
-    setOverride(data.guarantee_override ?? '');
-  };
+  const [confirming, setConfirming] = useState(false);
+  const dirty = useRef(false);
 
   const fail = (message: string) => {
     if (message.includes('forbidden')) return onDenied();
     setError(adminErrorText(message));
   };
 
+  const apply = (data: Billing, resetForm: boolean) => {
+    setB(data);
+    if (resetForm) {
+      setGoLive(data.go_live_at ? data.go_live_at.slice(0, 10) : '');
+      setOverride(data.guarantee_override ?? '');
+      setNotes(data.notes ?? '');
+      dirty.current = false;
+    }
+  };
+
+  // runs on its own: new payments and plan changes from Stripe appear without anyone pressing anything.
+  // A refresh never overwrites something you are in the middle of typing.
   const load = useCallback(async () => {
     const { data, error: err } = await supabase.rpc('admin_billing_get', { p_account_id: accountId });
     if (err) return fail(err.message);
     setError(null);
-    apply(data as Billing);
+    apply(data as Billing, !dirty.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { updatedAt, refreshing, refresh } = useAutoRefresh(load, accountId);
 
-  const run = async (key: string, fn: () => PromiseLike<{ data: unknown; error: { message: string } | null }>, ok: string): Promise<boolean> => {
-    setBusy(key);
-    setError(null);
-    setNote(null);
-    const { data, error: err } = await fn();
-    setBusy(null);
+  const flash = (msg: string) => {
+    setNote(msg);
+    setTimeout(() => setNote(null), 4000);
+  };
+
+  const syncNow = async (): Promise<boolean> => {
+    const { error: err } = await supabase.functions.invoke('stripe-sync', { body: { account_id: accountId } });
     if (err) {
-      fail(err.message);
+      setError('Linked, but the first sync from Stripe did not work yet. It will fill in when Stripe sends its next update, or try Sync now again.');
       return false;
     }
-    apply(data as Billing);
-    setNote(ok);
-    setTimeout(() => setNote(null), 4000);
     return true;
   };
 
-  const savePlan = () => {
-    const m = dollarsToCents(monthly);
-    const s = dollarsToCents(setup || '0');
-    if (m === null || m < 0) return setError('Enter the monthly price in dollars, for example 697.');
-    if (s === null || s < 0) return setError('Enter the setup fee in dollars, or 0.');
-    if (!plan.trim()) return setError('Give the plan a name.');
-    run(
-      'plan',
-      () =>
-        supabase.rpc('admin_billing_save', {
-          p_account_id: accountId,
-          p_patch: {
-            plan: plan.trim(), monthly_price_cents: m, setup_fee_cents: s, status, payment_method: method,
-            billing_email: email.trim() || null, next_invoice_on: nextOn || null, notes: notes.trim() || null,
-            go_live_at: goLive ? `${goLive}T12:00:00Z` : null,
-          },
-        }),
-      'Saved'
-    );
-  };
-
-  const saveOverride = (v: string) => {
-    setOverride(v);
-    run('override', () => supabase.rpc('admin_billing_save', { p_account_id: accountId, p_patch: { guarantee_override: v || null } }), 'Saved');
-  };
-
-  const addInvoice = async () => {
-    const cents = dollarsToCents(amount);
-    if (cents === null || cents === 0) return setError('Enter an amount in dollars. Use a negative amount for a credit, like -697.');
-    const ok = await run(
-      'invoice',
-      () => supabase.rpc('admin_invoice_add', { p_account_id: accountId, p_kind: kind, p_amount_cents: cents, p_issued_on: issued || null, p_status: invStatus, p_note: invNote.trim() || null }),
-      'Invoice added'
-    );
-    if (ok) {
-      setAmount('');
-      setInvNote('');
+  const link = async () => {
+    const id = customer.trim();
+    if (!isStripeCustomerId(id)) return setError('A Stripe customer id looks like cus_NffrFeUfNV2Hib. Copy it from the customer page in Stripe.');
+    setBusy('link');
+    setError(null);
+    const { data, error: err } = await supabase.rpc('admin_billing_link_stripe', { p_account_id: accountId, p_customer_id: id });
+    if (err) {
+      setBusy(null);
+      return fail(err.message);
     }
+    apply(data as Billing, true);
+    setCustomer('');
+    const ok = await syncNow();
+    setBusy(null);
+    if (ok) flash('Linked and synced');
+    await load();
   };
 
-  const setInvoice = (id: string, s: 'paid' | 'void' | 'pending') =>
-    run('inv-' + id, () => supabase.rpc('admin_invoice_set_status', { p_invoice_id: id, p_status: s, p_paid_on: null }), 'Updated');
+  const sync = async () => {
+    setBusy('sync');
+    setError(null);
+    const ok = await syncNow();
+    setBusy(null);
+    if (ok) flash('Synced from Stripe');
+    await load();
+  };
+
+  const unlink = async () => {
+    if (!confirming) {
+      setConfirming(true);
+      setTimeout(() => setConfirming(false), 6000);
+      return;
+    }
+    setConfirming(false);
+    setBusy('unlink');
+    const { data, error: err } = await supabase.rpc('admin_billing_link_stripe', { p_account_id: accountId, p_customer_id: null });
+    setBusy(null);
+    if (err) return fail(err.message);
+    apply(data as Billing, true);
+    flash('Unlinked');
+  };
+
+  const saveLocal = async (patch: Record<string, unknown>, ok: string) => {
+    setBusy('save');
+    setError(null);
+    const { data, error: err } = await supabase.rpc('admin_billing_save', { p_account_id: accountId, p_patch: patch });
+    setBusy(null);
+    if (err) return fail(err.message);
+    apply(data as Billing, true);
+    flash(ok);
+  };
 
   if (!b) return <p className="py-16 text-center text-sm text-slate-400">{error ?? 'Loading billing…'}</p>;
 
   const g = guaranteeView(b.guarantee);
   const required = b.guarantee.required ?? 2;
   const pct = Math.min(100, Math.round(((b.guarantee.booked ?? 0) / required) * 100));
+  const subLabel = b.stripe.status ? SUBSCRIPTION_LABEL[b.stripe.status] ?? b.stripe.status : 'No subscription yet';
 
   return (
     <div className="space-y-8">
       {error && <Notice tone="error">{error}</Notice>}
       {note && <Notice tone="ok">{note}</Notice>}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {[
-          ['Plan', b.plan, null],
-          ['Monthly', centsToDollars(b.monthly_price_cents), null],
-          ['Paid to date', centsToDollars(b.paid_cents), null],
-          ['Waiting', centsToDollars(b.pending_cents), null],
-        ].map(([label, value]) => (
-          <div key={label as string} className="rounded-2xl border border-white/[0.07] bg-[#0f1424] p-5">
-            <div className="text-sm text-slate-400">{label}</div>
-            <div className="mt-2 truncate font-display text-2xl font-bold tracking-tight text-slate-100">{value}</div>
-          </div>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-xl text-sm leading-relaxed text-slate-400">
+          Stripe takes the payments. Everything on this page is read from Stripe automatically; nothing here needs typing in. Change the plan or refund in Stripe.
+        </p>
+        <Updated at={updatedAt} refreshing={refreshing} onRefresh={refresh} />
       </div>
+
+      {!b.linked ? (
+        <Card title="Connect to Stripe" hint="Link this client to their customer in Stripe. The plan, price, payments and invoices then appear here and stay up to date.">
+          <Field id="st-cus" label="Stripe customer id" hint="In Stripe, open Customers, then the customer. The id starts with cus_.">
+            <input id="st-cus" value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="cus_..." autoCapitalize="off" autoCorrect="off" className={inputCls} />
+          </Field>
+          <Button onClick={link} disabled={busy === 'link' || !customer.trim()}>
+            {busy === 'link' ? 'Linking…' : 'Link and sync'}
+          </Button>
+        </Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {([
+              ['Plan', b.stripe.price_label || b.plan],
+              ['Monthly', b.monthly_price_cents ? centsToDollars(b.monthly_price_cents) : '—'],
+              ['Paid to date', centsToDollars(b.paid_cents)],
+              ['Open balance', centsToDollars(b.open_cents)],
+            ] as [string, string][]).map(([label, value]) => (
+              <div key={label} className="rounded-2xl border border-white/[0.07] bg-[#0f1424] p-5">
+                <div className="text-sm text-slate-400">{label}</div>
+                <div className={`mt-2 truncate font-display text-2xl font-bold tracking-tight ${label === 'Open balance' && b.open_cents > 0 ? 'text-red-300' : 'text-slate-100'}`}>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          <Card
+            title="Subscription"
+            action={<Chip tone={statusTone(b.stripe.status)}>{subLabel}</Chip>}
+          >
+            <Row label="Next invoice" value={b.stripe.current_period_end ? day(b.stripe.current_period_end) : ''} />
+            <Row label="Card on file" value={b.stripe.payment_method || ''} />
+            <Row label="Last synced" value={b.stripe.synced_at ? relativeTime(b.stripe.synced_at) : 'Not yet'} />
+            {b.stripe.cancel_at_period_end && <Notice tone="error">This subscription is set to cancel at the end of the current period.</Notice>}
+            <div className="flex flex-wrap items-center gap-3">
+              <Button tone="quiet" onClick={sync} disabled={busy === 'sync'}>{busy === 'sync' ? 'Syncing…' : 'Sync now'}</Button>
+              <a
+                href={stripeCustomerUrl(b.stripe.customer_id || '')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] px-5 font-display text-sm font-semibold text-slate-200 transition-colors hover:bg-white/[0.07]"
+              >
+                Open in Stripe
+              </a>
+              <Button tone={confirming ? 'danger' : 'quiet'} onClick={unlink} disabled={busy === 'unlink'}>
+                {confirming ? 'Confirm: unlink' : 'Unlink'}
+              </Button>
+            </div>
+          </Card>
+
+          <Card title="Invoices" hint="The latest 24, mirrored from Stripe.">
+            {b.invoices.length === 0 ? (
+              <p className="text-sm text-slate-400">No invoices yet.</p>
+            ) : (
+              <ul className="divide-y divide-white/[0.06]">
+                {b.invoices.map((i) => (
+                  <li key={i.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="font-display text-base font-bold text-slate-100">{centsToDollars(i.status === 'paid' ? i.amount_paid_cents : i.amount_due_cents)}</span>
+                        <Chip tone={i.status === 'paid' ? 'ok' : i.status === 'open' ? 'gold' : 'plain'}>{INVOICE_LABEL[i.status] ?? i.status}</Chip>
+                      </div>
+                      <div className="mt-1 text-sm text-slate-400">
+                        {i.number || 'Invoice'} · {day(i.issued_at)}
+                      </div>
+                    </div>
+                    {i.hosted_invoice_url && (
+                      <a href={i.hosted_invoice_url} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-[#ffc174] underline-offset-4 hover:underline">
+                        View invoice
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </>
+      )}
 
       <Card
         title="30-day guarantee"
@@ -200,99 +264,42 @@ export const BillingTab: React.FC<{ accountId: string; onDenied: () => void; ini
             <div className="h-full rounded-full bg-[#f59e0b] transition-all" style={{ width: `${pct}%` }} />
           </div>
         </div>
-        <Row label="Went live" value={b.go_live_at ? dayText(b.go_live_at) : 'Not yet'} />
-        <Row label="Window ends" value={b.guarantee.window_end ? dayText(b.guarantee.window_end) : 'Not yet'} />
+        <Row label="Went live" value={b.go_live_at ? day(b.go_live_at) : 'Not yet'} />
+        <Row label="Window ends" value={b.guarantee.window_end ? day(b.guarantee.window_end) : 'Not yet'} />
         <Row label="Missed calls in the window" value={`${b.guarantee.missed_calls ?? 0} (${b.guarantee.calls_per_week ?? 0} a week)`} />
-        <Field id="g-override" label="Decision" hint="Override the result by hand, for example to give the free month or to waive it.">
-          <Sel id="g-override" value={override} onChange={saveOverride} options={[['', 'Follow the numbers'], ['credited', 'Free month given'], ['waived', 'Waived']]} />
-        </Field>
-      </Card>
-
-      <Card
-        title="Plan and billing"
-        action={<Chip tone={statusTone(b.status)}>{STATUS_OPTIONS.find(([v]) => v === b.status)?.[1]}</Chip>}
-      >
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <Field id="bp-plan" label="Plan name">
-            <input id="bp-plan" value={plan} onChange={(e) => setPlan(e.target.value)} maxLength={60} className={inputCls} />
-          </Field>
-          <Field id="bp-status" label="Status">
-            <Sel id="bp-status" value={status} onChange={setStatus} options={STATUS_OPTIONS} />
-          </Field>
-          <Field id="bp-monthly" label="Monthly price ($)">
-            <input id="bp-monthly" inputMode="decimal" value={monthly} onChange={(e) => setMonthly(e.target.value)} className={inputCls} />
-          </Field>
-          <Field id="bp-setup" label="Setup fee ($)">
-            <input id="bp-setup" inputMode="decimal" value={setup} onChange={(e) => setSetup(e.target.value)} className={inputCls} />
-          </Field>
-          <Field id="bp-method" label="Payment method">
-            <Sel id="bp-method" value={method} onChange={setMethod} options={METHOD_OPTIONS} />
-          </Field>
-          <Field id="bp-email" label="Billing email">
-            <input id="bp-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
-          </Field>
-          <Field id="bp-next" label="Next invoice on">
-            <input id="bp-next" type="date" value={nextOn} onChange={(e) => setNextOn(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls} />
-          </Field>
-          <Field id="bp-live" label="Went live on" hint="Starts the 30-day guarantee. Set automatically when the engine is first turned on.">
-            <input id="bp-live" type="date" value={goLive} onChange={(e) => setGoLive(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls} />
-          </Field>
-        </div>
-        <Field id="bp-notes" label="Notes">
-          <textarea id="bp-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={1000} className={`${inputCls} h-auto py-3`} />
-        </Field>
-        <Button onClick={savePlan} disabled={busy === 'plan'}>{busy === 'plan' ? 'Saving…' : 'Save billing'}</Button>
-      </Card>
-
-      <Card title="Invoices" hint="A simple ledger. Record what you charged and what has been paid.">
-        {b.invoices.length === 0 ? (
-          <p className="text-sm text-slate-400">No invoices yet.</p>
-        ) : (
-          <ul className="divide-y divide-white/[0.06]">
-            {b.invoices.map((i) => (
-              <li key={i.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="font-display text-base font-bold text-slate-100">{centsToDollars(i.amount_cents)}</span>
-                    <Chip tone={i.status === 'paid' ? 'ok' : i.status === 'void' ? 'plain' : 'gold'}>{i.status === 'paid' ? 'Paid' : i.status === 'void' ? 'Void' : 'Waiting'}</Chip>
-                  </div>
-                  <div className="mt-1 text-sm text-slate-400">
-                    {KIND_OPTIONS.find(([v]) => v === i.kind)?.[1]} · {dayText(i.issued_on)}
-                    {i.note ? ` · ${i.note}` : ''}
-                  </div>
-                </div>
-                {i.status === 'pending' && (
-                  <div className="flex gap-2">
-                    <Button tone="quiet" className="!h-10 !px-4" onClick={() => setInvoice(i.id, 'paid')} disabled={busy === 'inv-' + i.id}>Mark paid</Button>
-                    <Button tone="quiet" className="!h-10 !px-4" onClick={() => setInvoice(i.id, 'void')} disabled={busy === 'inv-' + i.id}>Void</Button>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
+        {b.guarantee.status === 'credit_due' && b.stripe.customer_id && (
+          <Notice tone="error">A free month is owed. Apply a credit to the next invoice in Stripe, then mark it as given below.</Notice>
         )}
-
-        <div className="space-y-5 rounded-xl border border-white/[0.06] bg-[#0a0f1d] p-5">
-          <div className="text-sm font-semibold text-slate-300">Add an invoice</div>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <Field id="in-kind" label="Type">
-              <Sel id="in-kind" value={kind} onChange={setKind} options={KIND_OPTIONS} />
-            </Field>
-            <Field id="in-amount" label="Amount ($)" hint="A credit is negative, like -697.">
-              <input id="in-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="697" className={inputCls} />
-            </Field>
-            <Field id="in-date" label="Date">
-              <input id="in-date" type="date" value={issued} onChange={(e) => setIssued(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls} />
-            </Field>
-            <Field id="in-status" label="Status">
-              <Sel id="in-status" value={invStatus} onChange={setInvStatus} options={[['pending', 'Waiting for payment'], ['paid', 'Paid']]} />
-            </Field>
-          </div>
-          <Field id="in-note" label="Note (optional)">
-            <input id="in-note" value={invNote} onChange={(e) => setInvNote(e.target.value)} maxLength={300} className={inputCls} />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <Field id="g-override" label="Decision" hint="Override the result by hand.">
+            <select
+              id="g-override"
+              value={override}
+              onChange={(e) => { dirty.current = true; setOverride(e.target.value); }}
+              style={{ colorScheme: 'dark' }}
+              className={inputCls}
+            >
+              <option value="">Follow the numbers</option>
+              <option value="credited">Free month given</option>
+              <option value="waived">Waived</option>
+            </select>
           </Field>
-          <Button onClick={addInvoice} disabled={busy === 'invoice'}>{busy === 'invoice' ? 'Adding…' : 'Add invoice'}</Button>
+          <Field id="g-live" label="Went live on" hint="Set automatically when the engine is first turned on.">
+            <input id="g-live" type="date" value={goLive} onChange={(e) => { dirty.current = true; setGoLive(e.target.value); }} style={{ colorScheme: 'dark' }} className={inputCls} />
+          </Field>
         </div>
+        <Button onClick={() => saveLocal({ guarantee_override: override || null, go_live_at: goLive ? `${goLive}T12:00:00Z` : null }, 'Saved')} disabled={busy === 'save'}>
+          {busy === 'save' ? 'Saving…' : 'Save guarantee'}
+        </Button>
+      </Card>
+
+      <Card title="Notes" hint="Private to the admin team. Not shown to the client.">
+        <Field id="bn-notes" label="Billing notes">
+          <textarea id="bn-notes" value={notes} onChange={(e) => { dirty.current = true; setNotes(e.target.value); }} rows={3} maxLength={1000} className={`${inputCls} h-auto py-3`} />
+        </Field>
+        <Button onClick={() => saveLocal({ notes: notes.trim() || null }, 'Saved')} disabled={busy === 'save'}>
+          {busy === 'save' ? 'Saving…' : 'Save notes'}
+        </Button>
       </Card>
     </div>
   );

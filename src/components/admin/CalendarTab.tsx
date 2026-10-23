@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Button, Card, Chip, Field, Notice, Row, inputCls } from '../ui';
-import { adminErrorText } from '../../lib/adminTools';
+import { adminErrorText, relativeTime } from '../../lib/adminTools';
+import { Updated } from '../Updated';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
 
 export interface Cal {
   provider: string;
@@ -21,14 +23,7 @@ export interface Cal {
 const PROVIDERS: [string, string][] = [['none', 'None'], ['google', 'Google Calendar'], ['microsoft', 'Microsoft Outlook'], ['ics', 'Calendar feed (read only)']];
 const STATUSES: [string, string][] = [['not_connected', 'Not connected'], ['active', 'Connected'], ['needs_reauth', 'Needs the owner to sign in again'], ['error', 'Error']];
 
-const ago = (iso: string | null): string => {
-  if (!iso) return 'Never';
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'Just now';
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
-  return `${Math.floor(s / 86400)} d ago`;
-};
+const ago = (iso: string | null): string => relativeTime(iso);
 
 const tone = (status: string): 'ok' | 'gold' | 'danger' | 'plain' =>
   status === 'active' ? 'ok' : status === 'needs_reauth' ? 'gold' : status === 'error' ? 'danger' : 'plain';
@@ -43,13 +38,17 @@ export const CalendarTab: React.FC<{ accountId: string; onDenied: () => void; in
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const dirty = useRef(false);
 
-  const apply = (c: Cal & { external_calendar_id: string | null }) => {
+  const apply = (c: Cal & { external_calendar_id: string | null }, resetForm = true) => {
     setCal(c);
-    setProvider(c.provider);
-    setStatus(c.status);
-    setCalId(c.external_calendar_id ?? '');
-    setLabel(c.calendar_label ?? '');
+    if (resetForm) {
+      setProvider(c.provider);
+      setStatus(c.status);
+      setCalId(c.external_calendar_id ?? '');
+      setLabel(c.calendar_label ?? '');
+      dirty.current = false;
+    }
   };
 
   const fail = (message: string) => {
@@ -61,13 +60,15 @@ export const CalendarTab: React.FC<{ accountId: string; onDenied: () => void; in
     const { data, error: err } = await supabase.rpc('admin_calendar_status', { p_account_id: accountId });
     if (err) return fail(err.message);
     setError(null);
-    apply(data as Cal);
+    apply(data as Cal, !dirty.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { updatedAt, refreshing, refresh } = useAutoRefresh(load, accountId);
+  const edit = (fn: (v: string) => void) => (v: string) => {
+    dirty.current = true;
+    fn(v);
+  };
 
   const run = async (key: string, fn: () => PromiseLike<{ data: unknown; error: { message: string } | null }>, ok: string) => {
     setBusy(key);
@@ -101,6 +102,9 @@ export const CalendarTab: React.FC<{ accountId: string; onDenied: () => void; in
 
   return (
     <div className="space-y-8">
+      <div className="flex justify-end">
+        <Updated at={updatedAt} refreshing={refreshing} onRefresh={refresh} />
+      </div>
       {error && <Notice tone="error">{error}</Notice>}
 
       <Card
@@ -110,24 +114,24 @@ export const CalendarTab: React.FC<{ accountId: string; onDenied: () => void; in
       >
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <Field id="cal-provider" label="Calendar">
-            <select id="cal-provider" value={provider} onChange={(e) => setProvider(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls}>
+            <select id="cal-provider" value={provider} onChange={(e) => edit(setProvider)(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls}>
               {PROVIDERS.map(([v, l]) => (
                 <option key={v} value={v}>{l}</option>
               ))}
             </select>
           </Field>
           <Field id="cal-status" label="Status">
-            <select id="cal-status" value={status} onChange={(e) => setStatus(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls}>
+            <select id="cal-status" value={status} onChange={(e) => edit(setStatus)(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls}>
               {STATUSES.map(([v, l]) => (
                 <option key={v} value={v}>{l}</option>
               ))}
             </select>
           </Field>
           <Field id="cal-id" label="Calendar ID or email" hint="Usually the owner's Google or Outlook address.">
-            <input id="cal-id" value={calId} onChange={(e) => setCalId(e.target.value)} placeholder="owner@company.com" className={inputCls} />
+            <input id="cal-id" value={calId} onChange={(e) => edit(setCalId)(e.target.value)} placeholder="owner@company.com" className={inputCls} />
           </Field>
           <Field id="cal-label" label="Label" hint="A name you will recognise, like the crew calendar.">
-            <input id="cal-label" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} className={inputCls} />
+            <input id="cal-label" value={label} onChange={(e) => edit(setLabel)(e.target.value)} maxLength={120} className={inputCls} />
           </Field>
         </div>
         <div className="flex flex-wrap items-center gap-3">

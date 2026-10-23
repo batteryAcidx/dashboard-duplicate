@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "tsx --test engine.test.ts ui.test.ts ui-render.test.tsx"
+    "test": "tsx --test engine.test.ts ui.test.ts ui-render.test.tsx stripe.test.ts"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

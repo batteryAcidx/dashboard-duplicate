@@ -61,7 +61,7 @@ export const AppHeader: React.FC<Props> = ({ companyName, userEmail, current, is
             <ChevronDown className="h-4 w-4 text-slate-500" />
           </button>
           {open && (
-            <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0f1424] py-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
+            <div className="menu-panel absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0f1424] py-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
               {ITEMS.map((i) => (
                 <button key={i.key} type="button" onClick={() => go(i.path)} className={itemCls(current === i.key)}>
                   {i.label}

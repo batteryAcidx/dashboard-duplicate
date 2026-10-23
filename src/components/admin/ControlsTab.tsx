@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Button, Card, Chip, Field, Notice, Row, Switch, inputCls } from '../ui';
 import { PAUSE_OPTIONS, adminErrorText, hoursToText, parseHours, pauseLeft, pauseUntilIso, readiness } from '../../lib/adminTools';
+import { Updated } from '../Updated';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
 
 export interface Controls {
   engine_enabled: boolean;
@@ -81,10 +83,15 @@ export const ControlsTab: React.FC<{ accountId: string; onDenied: () => void; in
   const [saved, setSaved] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [now, setNow] = useState(Date.now());
+  // true while there are edits that are not saved yet. A refresh must never overwrite them.
+  const dirty = useRef(false);
 
-  const apply = (data: Controls) => {
+  const apply = (data: Controls, resetForm = true) => {
     setC(data);
-    setF(formFrom(data));
+    if (resetForm) {
+      setF(formFrom(data));
+      dirty.current = false;
+    }
   };
 
   const fail = (message: string) => {
@@ -96,13 +103,12 @@ export const ControlsTab: React.FC<{ accountId: string; onDenied: () => void; in
     const { data, error: err } = await supabase.rpc('admin_get_controls', { p_account_id: accountId });
     if (err) return fail(err.message);
     setError(null);
-    apply(data as Controls);
+    apply(data as Controls, !dirty.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // loads on its own, then keeps itself up to date
+  const { updatedAt, refreshing, refresh } = useAutoRefresh(load, accountId);
 
   // keep "2h 10m left" honest while the tab is open
   useEffect(() => {
@@ -126,7 +132,10 @@ export const ControlsTab: React.FC<{ accountId: string; onDenied: () => void; in
     return true;
   };
 
-  const set = (k: string) => (v: string) => setF((prev) => ({ ...prev, [k]: v }));
+  const set = (k: string) => (v: string) => {
+    dirty.current = true;
+    setF((prev) => ({ ...prev, [k]: v }));
+  };
 
   const saveLimits = () => {
     const a = whole(f.dailyMsg, 1, 5000, 'Daily messages');
@@ -221,6 +230,9 @@ export const ControlsTab: React.FC<{ accountId: string; onDenied: () => void; in
 
   return (
     <div className="space-y-8">
+      <div className="flex justify-end">
+        <Updated at={updatedAt} refreshing={refreshing} onRefresh={refresh} />
+      </div>
       {error && <Notice tone="error">{error}</Notice>}
 
       <Card

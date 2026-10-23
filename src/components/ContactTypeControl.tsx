@@ -78,7 +78,7 @@ export const ContactTypeControl: React.FC<Props> = ({ type, needsReview, onChang
           <div className="fixed inset-0 z-40 bg-black/50 sm:hidden" onClick={close} aria-hidden="true" />
           <div
             role="menu"
-            className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[#222c42] bg-[#0f1422] p-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:mt-2 sm:w-72 sm:rounded-xl sm:border sm:p-1.5 sm:pb-1.5 sm:shadow-[0_12px_32px_rgba(0,0,0,0.65)]"
+            className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[#222c42] bg-[#0f1422] p-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:absolute sm:inset-x-auto sm:bottom-auto menu-panel sm:left-0 sm:top-full sm:mt-2 sm:w-72 sm:rounded-xl sm:border sm:p-1.5 sm:pb-1.5 sm:shadow-[0_12px_32px_rgba(0,0,0,0.65)]"
           >
             <div className="px-3 pt-2 pb-1.5 font-body text-[11px] tracking-wide text-slate-500 font-semibold">
               Who is this?

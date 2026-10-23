@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronDown, LogOut, Plus, RotateCcw } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, ChevronDown, Plus, RotateCcw } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { NotFoundPage } from './NotFoundPage';
 import { AdminConversations } from '../components/AdminConversations';
@@ -8,7 +8,14 @@ import { AdminMfaGate } from '../components/AdminMfaGate';
 import { ControlsTab } from '../components/admin/ControlsTab';
 import { CalendarTab } from '../components/admin/CalendarTab';
 import { BillingTab } from '../components/admin/BillingTab';
-import { Card as UiCard, Row as UiRow } from '../components/ui';
+import { ActivityTab } from '../components/admin/ActivityTab';
+import { HealthTab } from '../components/admin/HealthTab';
+import { LegacyGhlCard } from '../components/admin/LegacyGhlCard';
+import { AdminSettings } from '../components/admin/AdminSettings';
+import { AdminShell } from '../components/admin/AdminShell';
+import { Updated } from '../components/Updated';
+import { useAutoRefresh } from '../lib/useAutoRefresh';
+import { Card as UiCard, Row as UiRow, inputCls as uiInputCls } from '../components/ui';
 
 /* ---------- types ---------- */
 
@@ -165,22 +172,20 @@ const fmt = (iso: string | null) =>
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
-const inputCls =
-  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg px-3 py-2.5 text-sm font-body text-slate-100 placeholder:text-slate-600 disabled:opacity-60";
-const labelCls =
-  "block font-body text-[11px] tracking-wide text-slate-400 font-semibold mb-1.5";
+const inputCls = uiInputCls;
+const labelCls = "mb-2 block text-sm font-medium text-slate-300";
 const primaryBtn =
-  "px-4 py-2 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50";
+  "inline-flex h-11 items-center justify-center rounded-xl bg-[#f59e0b] px-5 font-display text-sm font-bold text-[#150f05] transition-colors hover:bg-[#fbbf24] cursor-pointer disabled:opacity-50";
 const ghostBtn =
-  "px-4 py-2 rounded-lg bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-300 font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50";
+  "inline-flex h-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] px-5 font-display text-sm font-semibold text-slate-200 transition-colors hover:bg-white/[0.07] cursor-pointer disabled:opacity-50";
 const dangerBtn =
-  "px-4 py-2 rounded-lg bg-red-950/30 border border-red-900/40 hover:border-red-700/60 text-red-400 font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50";
+  "inline-flex h-11 items-center justify-center rounded-xl border border-red-400/30 bg-red-500/10 px-5 font-display text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/15 cursor-pointer disabled:opacity-50";
 
 /* ---------- small building blocks ---------- */
 
 const StatusChip: React.FC<{ status: AccountStatus }> = ({ status }) => (
   <span
-    className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-body tracking-wide font-semibold shrink-0 ${STATUS_CHIP[status]}`}
+    className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_CHIP[status]}`}
   >
     {STATUS_LABEL[status]}
   </span>
@@ -188,10 +193,10 @@ const StatusChip: React.FC<{ status: AccountStatus }> = ({ status }) => (
 
 const Pill: React.FC<{ children: React.ReactNode; tone?: 'gold' | 'plain' }> = ({ children, tone = 'plain' }) => (
   <span
-    className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-body tracking-wide font-semibold shrink-0 ${
+    className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
       tone === 'gold'
-        ? 'border-[#f59e0b]/50 bg-[#261d10] text-[#ffc174]'
-        : 'border-[#232a3f] bg-[#0a0e19] text-slate-400'
+        ? 'border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#ffc174]'
+        : 'border-white/[0.08] bg-white/[0.04] text-slate-300'
     }`}
   >
     {children}
@@ -199,7 +204,7 @@ const Pill: React.FC<{ children: React.ReactNode; tone?: 'gold' | 'plain' }> = (
 );
 
 const TerritoryTag: React.FC<{ name: string }> = ({ name }) => (
-  <span className="inline-flex items-center px-2 py-0.5 rounded-md border border-[#2b354d] bg-[#151b2b] text-[11px] font-data text-slate-200">
+  <span className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 font-data text-xs text-slate-200">
     {name}
   </span>
 );
@@ -326,30 +331,27 @@ const FILTERS: ['all' | AccountStatus, string][] = [
 
 const ClientListView: React.FC<{ goto: (p: string) => void; onDenied: () => void }> = ({ goto, onDenied }) => {
   const [clients, setClients] = useState<ClientRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [created, setCreated] = useState<{ account_id: string; owner_email: string; name: string } | null>(null);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | AccountStatus>('all');
 
+  // loads on its own and keeps itself up to date, without flashing a loading screen each time
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
     const r = await callAdmin<{ clients: ClientRow[] }>('list_clients');
     if (r.status === 403) return onDenied();
     if (r.error || !r.data) {
       setError(r.error || 'Could not load clients.');
-      setLoading(false);
       return;
     }
+    setError(null);
     setClients(r.data.clients);
-    setLoading(false);
+    setLoaded(true);
   }, [onDenied]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { updatedAt, refreshing, refresh } = useAutoRefresh(load, 'clients');
 
   const q = query.trim().toLowerCase();
   const visible = clients.filter(
@@ -364,23 +366,21 @@ const ClientListView: React.FC<{ goto: (p: string) => void; onDenied: () => void
 
   return (
     <>
-      <div className="mt-8 mb-6 flex items-end justify-between gap-4 flex-wrap">
+      <div className="mb-8 mt-6 flex flex-wrap items-end justify-between gap-5">
         <div>
-          <span className="font-body text-xs tracking-wide text-[#f59e0b] font-bold block mb-2">ADMIN</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-100 leading-none">
-            Clients
-          </h1>
+          <span className="mb-2 block text-sm font-semibold text-[#f59e0b]">Admin</span>
+          <h1 className="font-display text-3xl font-extrabold tracking-tight text-slate-100 sm:text-4xl">Clients</h1>
         </div>
-        <button type="button" onClick={() => setShowCreate((v) => !v)} className={`${primaryBtn} inline-flex items-center gap-1.5`}>
-          <Plus className="w-4 h-4" />
+        <button type="button" onClick={() => setShowCreate((v) => !v)} className={`${primaryBtn} gap-2`}>
+          <Plus className="h-4 w-4" />
           New client
         </button>
       </div>
 
       {created && (
-        <div className="mb-6 p-4 rounded-xl bg-[#1a1710] border border-[#f59e0b]/40 text-sm text-slate-200 leading-relaxed">
+        <div className="mb-6 rounded-2xl border border-[#f59e0b]/35 bg-[#f59e0b]/[0.07] p-5 text-[15px] leading-relaxed text-slate-200">
           <strong className="font-display">{created.name}</strong> created. An invite was sent to {created.owner_email}.{' '}
-          <button type="button" onClick={() => goto(`/admin/${created.account_id}`)} className="text-[#ffc174] underline cursor-pointer">
+          <button type="button" onClick={() => goto(`/admin/${created.account_id}`)} className="cursor-pointer text-[#ffc174] underline underline-offset-4">
             Open client
           </button>
         </div>
@@ -393,32 +393,34 @@ const ClientListView: React.FC<{ goto: (p: string) => void; onDenied: () => void
           onDone={(r) => {
             setCreated(r);
             setShowCreate(false);
-            load();
+            refresh();
           }}
         />
       )}
 
-      {loading ? (
+      {!loaded && !error ? (
         <LoadingBlock text="Loading clients…" />
-      ) : error ? (
-        <RetryBlock text={error} onRetry={load} />
+      ) : error && !loaded ? (
+        <RetryBlock text={error} onRetry={refresh} />
       ) : (
         <>
-          <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-            <div role="group" aria-label="Filter by status" className="inline-flex p-0.5 rounded-lg bg-[#090d18] border border-[#232839]">
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div role="tablist" aria-label="Filter by status" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
               {FILTERS.map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
-                  aria-pressed={filter === key}
+                  role="tab"
+                  aria-selected={filter === key}
                   onClick={() => setFilter(key)}
-                  className={`px-3 py-1.5 rounded-md font-data text-[11px] font-semibold transition-colors cursor-pointer ${
+                  className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition-colors ${
                     filter === key
-                      ? 'bg-[#151b2b] border border-[#2b354d] text-[#ffc174]'
-                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                      ? 'border-[#f59e0b]/50 bg-[#f59e0b]/10 text-[#ffc174]'
+                      : 'border-white/[0.08] text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  {label} {countOf(key)}
+                  {label}
+                  <span className={`text-xs ${filter === key ? 'text-[#ffc174]/70' : 'text-slate-500'}`}>{countOf(key)}</span>
                 </button>
               ))}
             </div>
@@ -428,23 +430,26 @@ const ClientListView: React.FC<{ goto: (p: string) => void; onDenied: () => void
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search name, email or territory"
-              className={`${inputCls} md:w-72`}
+              className={`${inputCls} lg:w-80`}
             />
+          </div>
+          <div className="mb-4">
+            <Updated at={updatedAt} refreshing={refreshing} onRefresh={refresh} />
           </div>
 
           {visible.length === 0 ? (
-            <div className="p-10 rounded-xl border border-dashed border-[#232839] bg-[#0c101d]/60 text-center text-sm text-slate-400">
+            <div className="rounded-2xl border border-dashed border-white/[0.09] p-12 text-center text-sm text-slate-400">
               {clients.length === 0 ? 'No clients yet. Create the first one.' : 'No clients match.'}
             </div>
           ) : (
-            <div className="rounded-xl border border-[#22283a] bg-[#111625] overflow-hidden">
-              <div className="grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_minmax(0,2fr)_minmax(0,1.3fr)] gap-4 px-5 py-3 border-b border-[#1b2336] font-body text-[11px] tracking-wide text-slate-500 font-semibold">
+            <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0f1424]">
+              <div className="hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_minmax(0,2fr)_minmax(0,1.3fr)] gap-4 border-b border-white/[0.06] px-6 py-3.5 text-[13px] font-medium text-slate-500 md:grid">
                 <span>Client</span>
                 <span>Territory</span>
                 <span>Owner</span>
                 <span>Setup</span>
               </div>
-              <ul className="divide-y divide-[#1b2336]">
+              <ul className="divide-y divide-white/[0.06]">
                 {visible.map((c) => {
                   const pct = c.steps_total ? Math.round((c.steps_done / c.steps_total) * 100) : 0;
                   return (
@@ -452,29 +457,29 @@ const ClientListView: React.FC<{ goto: (p: string) => void; onDenied: () => void
                       <button
                         type="button"
                         onClick={() => goto(`/admin/${c.id}`)}
-                        className="w-full text-left grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_minmax(0,2fr)_minmax(0,1.3fr)] items-center gap-4 px-5 py-4 hover:bg-[#151b2c] transition-colors cursor-pointer"
+                        className="grid w-full cursor-pointer grid-cols-1 gap-3 px-5 py-5 text-left transition-colors hover:bg-white/[0.03] md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_minmax(0,2fr)_minmax(0,1.3fr)] md:items-center md:gap-4 md:px-6"
                       >
-                        <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-                          <span className="font-display text-[15px] font-bold text-slate-100 truncate">{c.name}</span>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+                          <span className="truncate font-display text-base font-bold tracking-tight text-slate-100">{c.name}</span>
                           <StatusChip status={c.status} />
                           {c.waiting > 0 && <Pill tone="gold">Waiting on client</Pill>}
                         </div>
-                        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                           {c.territories.length ? (
                             c.territories.map((t) => <TerritoryTag key={t} name={t} />)
                           ) : (
-                            <span className="text-xs text-slate-500">None</span>
+                            <span className="text-sm text-slate-500">No territory</span>
                           )}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-sm text-slate-300 truncate">{c.owner_email || 'No owner'}</div>
-                          {c.owner_state === 'pending' && <div className="text-[11px] text-slate-500">Invite pending</div>}
+                          <div className="truncate text-sm text-slate-300">{c.owner_email || 'No owner'}</div>
+                          {c.owner_state === 'pending' && <div className="text-xs text-slate-500">Invite pending</div>}
                         </div>
                         <div className="flex items-center gap-3">
-                          <div className="h-1.5 flex-1 rounded-full bg-[#151b2b] overflow-hidden">
+                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                             <div className="h-full rounded-full bg-[#f59e0b]" style={{ width: `${pct}%` }} />
                           </div>
-                          <span className="font-data text-[11px] text-slate-500 shrink-0">
+                          <span className="shrink-0 font-data text-xs text-slate-500">
                             {c.steps_done}/{c.steps_total}
                           </span>
                         </div>
@@ -613,7 +618,7 @@ const TerritoriesView: React.FC<{ goto: (p: string) => void; onDenied: () => voi
       ) : (
         <>
           <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-            <div role="group" aria-label="Filter" className="inline-flex p-0.5 rounded-lg bg-[#090d18] border border-[#232839]">
+            <div role="group" aria-label="Filter" className="inline-flex rounded-xl border border-white/[0.07] bg-[#090d18] p-1">
               {(
                 [
                   ['all', 'All'],
@@ -647,12 +652,12 @@ const TerritoriesView: React.FC<{ goto: (p: string) => void; onDenied: () => voi
           </div>
 
           {visible.length === 0 ? (
-            <div className="p-10 rounded-xl border border-dashed border-[#232839] bg-[#0c101d]/60 text-center text-sm text-slate-400">
+            <div className="rounded-2xl border border-dashed border-white/[0.09] p-12 text-center text-sm text-slate-400">
               {rows.length === 0 ? 'No territories yet. Add one above, or lock one from a client page.' : 'No territories match.'}
             </div>
           ) : (
-            <div className="rounded-xl border border-[#22283a] bg-[#111625] overflow-hidden">
-              <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,2.2fr)] gap-4 px-5 py-3 border-b border-[#1b2336] font-body text-[11px] tracking-wide text-slate-500 font-semibold">
+            <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0f1424]">
+              <div className="hidden grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,2.2fr)] gap-4 border-b border-white/[0.06] px-6 py-3.5 text-[13px] font-medium text-slate-500 md:grid">
                 <span>Territory</span>
                 <span>Status</span>
                 <span>Held by</span>
@@ -666,7 +671,7 @@ const TerritoriesView: React.FC<{ goto: (p: string) => void; onDenied: () => voi
                   return (
                     <li
                       key={t.id}
-                      className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,2.2fr)] items-center gap-4 px-5 py-3.5"
+                      className="grid grid-cols-1 gap-3 px-5 py-5 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,2.2fr)] md:items-center md:gap-4 md:px-6"
                     >
                       <div className="min-w-0">
                         <span className="font-display text-sm font-bold text-slate-100">{t.name}</span>
@@ -694,7 +699,7 @@ const TerritoriesView: React.FC<{ goto: (p: string) => void; onDenied: () => voi
                         )}
                       </div>
                       <div className="text-xs text-slate-400 font-data">{fmtDate(t.locked_at)}</div>
-                      <div className="flex items-center justify-end gap-2 flex-wrap">
+                      <div className="flex flex-wrap items-center justify-start gap-2 md:justify-end">
                         {confirming ? (
                           <>
                             <span className="text-xs text-slate-300">
@@ -727,7 +732,7 @@ const TerritoriesView: React.FC<{ goto: (p: string) => void; onDenied: () => voi
                               aria-label={`Assign ${t.name} to a client`}
                               value={choice[t.id] || ''}
                               onChange={(e) => setChoice((c) => ({ ...c, [t.id]: e.target.value }))}
-                              className={`${inputCls} w-40 py-1.5`}
+                              className={`${inputCls} md:w-44`}
                             >
                               <option value="">Assign to…</option>
                               {clients.map((c) => (
@@ -1217,7 +1222,7 @@ const StatusCard: React.FC<{ detail: ClientDetail; onChanged: () => Promise<void
 
 /* ---------- client detail ---------- */
 
-type Tab = 'overview' | 'conversations' | 'setup' | 'controls' | 'calendar' | 'billing' | 'account' | 'activity';
+type Tab = 'overview' | 'conversations' | 'health' | 'setup' | 'controls' | 'calendar' | 'billing' | 'account' | 'activity';
 
 const ClientDetailView: React.FC<{
   accountId: string;
@@ -1301,6 +1306,7 @@ const ClientDetailView: React.FC<{
               [
                 ['overview', 'Overview'],
                 ['conversations', 'Conversations'],
+                ['health', 'Health'],
                 ['setup', `Setup ${detail.steps.filter((s) => s.status === 'done').length}/${detail.steps.length}`],
                 ['controls', 'Controls'],
                 ['calendar', 'Calendar'],
@@ -1339,6 +1345,7 @@ const ClientDetailView: React.FC<{
 
           {tab === 'setup' && <StepsPanel steps={detail.steps} onSave={saveStep} />}
 
+          {tab === 'health' && <HealthTab accountId={accountId} onDenied={onDenied} />}
           {tab === 'controls' && <ControlsTab accountId={accountId} onDenied={onDenied} />}
           {tab === 'calendar' && <CalendarTab accountId={accountId} onDenied={onDenied} />}
           {tab === 'billing' && <BillingTab accountId={accountId} onDenied={onDenied} />}
@@ -1358,43 +1365,12 @@ const ClientDetailView: React.FC<{
                   <ReadRow label="Created" value={fmtDate(detail.account.created_at)} />
                 </Card>
                 <StatusCard detail={detail} onChanged={reload} onDenied={onDenied} />
-                {detail.account.ghl_location_id && (
-                  <details className="group rounded-2xl border border-white/[0.07] bg-[#0f1424]">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-6 text-left sm:px-7">
-                      <span>
-                        <span className="block font-display text-lg font-semibold tracking-tight text-slate-100">Legacy connection</span>
-                        <span className="mt-1 block text-sm text-slate-400">GoHighLevel. No longer the main connection.</span>
-                      </span>
-                      <ChevronDown className="h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
-                    </summary>
-                    <div className="space-y-4 border-t border-white/[0.06] p-6 sm:px-7">
-                      <p className="text-sm leading-relaxed text-slate-400">
-                        This client was set up through GoHighLevel. Texting now runs through the WedgeScale engine. The old connection is kept here for reference only.
-                      </p>
-                      <ReadRow label="GHL location" value={detail.account.ghl_location_id} />
-                    </div>
-                  </details>
-                )}
+                <LegacyGhlCard accountId={detail.account.id} current={detail.account.ghl_location_id ?? null} onDenied={onDenied} onChanged={reload} />
               </div>
             </div>
           )}
 
-          {tab === 'activity' && (
-            <Card title="Admin activity" hint="Everything done to this client from the admin pages. Times are in your browser's time zone.">
-              {detail.audit.length === 0 ? (
-                <p className="text-sm text-slate-400">Nothing yet.</p>
-              ) : (
-                <ul className="divide-y divide-[#1b2336]">
-                  {detail.audit.map((a) => (
-                    <li key={a.id} className="flex items-start justify-between gap-4 py-2.5 text-sm">
-                      <span className="text-slate-300 min-w-0 break-words">{a.detail || a.action.replace(/_/g, ' ')}</span>
-                      <span className="font-data text-[11px] text-slate-500 shrink-0 pt-0.5">{fmt(a.created_at)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-          )}
+          {tab === 'activity' && <ActivityTab accountId={accountId} onDenied={onDenied} />}
         </>
       )}
     </>
@@ -1412,18 +1388,8 @@ interface AdminPageProps {
 
 export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onSignOut, userEmail = '', accountId = null }) => {
   const [denied, setDenied] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   const handleDenied = useCallback(() => setDenied(true), []);
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
 
   const goto = (path: string) => {
     if (onNavigate) onNavigate(path);
@@ -1433,79 +1399,23 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onSignOut, use
   // not an admin: look exactly like a page that does not exist
   if (denied) return <NotFoundPage onNavigate={onNavigate} />;
 
-  const onTerritories = accountId === 'territories';
-  const section: 'clients' | 'territories' = onTerritories ? 'territories' : 'clients';
+  const section = accountId === 'territories' ? 'territories' : accountId === 'settings' ? 'settings' : 'clients';
 
+  // Everything, including the Clients / Territories / Settings navigation, sits INSIDE the gate.
+  // Until the code is entered, the gate shows only its own slim header and the check.
   return (
-    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-body">
-      <div className="mx-auto max-w-6xl px-6 pt-5 pb-3 flex items-center justify-between gap-6">
-        <div className="flex items-center gap-8">
-          <span className="font-display text-lg font-bold text-slate-100 tracking-tight">
-            WEDGE<span className="text-[#ffc174]">SCALE</span>{' '}
-            <span className="font-body text-[11px] tracking-wide text-[#ffc174] border border-[#ffc174]/40 rounded-md px-1.5 py-0.5 align-middle">
-              Admin
-            </span>
-          </span>
-          <nav className="flex items-center gap-1" aria-label="Admin sections">
-            {(
-              [
-                ['clients', 'Clients', '/admin'],
-                ['territories', 'Territories', '/admin/territories'],
-              ] as ['clients' | 'territories', string, string][]
-            ).map(([key, label, path]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => goto(path)}
-                aria-current={section === key ? 'page' : undefined}
-                className={`px-3 py-1.5 rounded-lg font-display text-sm font-bold transition-colors cursor-pointer ${
-                  section === key ? 'bg-[#151b2b] text-slate-100' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </nav>
-        </div>
-        <div className="relative" ref={menuRef}>
-          <button
-            type="button"
-            onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#111728] border border-[#212b42] text-slate-300 text-xs"
-            aria-expanded={menuOpen}
-          >
-            <span className="max-w-[220px] truncate">{userEmail}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 mt-2 w-52 rounded-xl bg-[#0f1422] border border-[#222c42] py-1.5 z-50">
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onSignOut?.();
-                }}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-300 hover:text-red-400 hover:bg-[#192236] text-left"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                Sign out
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <AdminMfaGate onDenied={handleDenied}>
-        <main className="mx-auto max-w-6xl px-6 pb-24">
-          {onTerritories ? (
-            <TerritoriesView goto={goto} onDenied={handleDenied} />
-          ) : accountId ? (
-            <ClientDetailView accountId={accountId} goto={goto} onDenied={handleDenied} />
-          ) : (
-            <ClientListView goto={goto} onDenied={handleDenied} />
-          )}
-        </main>
-      </AdminMfaGate>
-    </div>
+    <AdminMfaGate onDenied={handleDenied} userEmail={userEmail} onSignOut={onSignOut}>
+      <AdminShell section={section} userEmail={userEmail} onNavigate={goto} onSignOut={onSignOut}>
+        {section === 'territories' ? (
+          <TerritoriesView goto={goto} onDenied={handleDenied} />
+        ) : section === 'settings' ? (
+          <AdminSettings userEmail={userEmail} onSignOut={onSignOut} />
+        ) : accountId ? (
+          <ClientDetailView accountId={accountId} goto={goto} onDenied={handleDenied} />
+        ) : (
+          <ClientListView goto={goto} onDenied={handleDenied} />
+        )}
+      </AdminShell>
+    </AdminMfaGate>
   );
 };

@@ -5,7 +5,7 @@ import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 import { ContactTypeControl } from '../components/ContactTypeControl';
 import { AppHeader } from '../components/AppHeader';
 import { Card as UiCard, inputCls as uiInputCls } from '../components/ui';
-import { ContactType, PICKABLE_TYPES, TYPE_HINT, TYPE_LABEL, normalizeType } from '../lib/leadView';
+import { ContactType, PICKABLE_TYPES, TYPE_LABEL, normalizeType } from '../lib/leadView';
 import { MAX_IMPORT_ROWS, formatPhone, parseContactCsv, toE164 } from '../lib/contacts';
 
 interface ContactRow {
@@ -48,7 +48,7 @@ const TypeSelect: React.FC<{ id: string; value: ContactType; onChange: (t: Conta
   >
     {PICKABLE_TYPES.map((t) => (
       <option key={t} value={t}>
-        {TYPE_LABEL[t]} ({TYPE_HINT[t].toLowerCase()})
+        {TYPE_LABEL[t]}
       </option>
     ))}
   </select>
