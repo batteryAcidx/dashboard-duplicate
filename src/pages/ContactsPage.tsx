@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
 import { isConfigured, ownerApi } from '../api';
-import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
+import { getCachedCompany, setCachedCompany, getCachedSetup } from '../lib/accountCache';
 import { ContactTypeControl } from '../components/ContactTypeControl';
 import { AppHeader } from '../components/AppHeader';
+import { useSynced } from '../lib/sync';
 import { PlatformFooter } from '../components/PlatformFooter';
 import { Card as UiCard, inputCls as uiInputCls } from '../components/ui';
 import { ContactType, PICKABLE_TYPES, TYPE_LABEL, normalizeType } from '../lib/leadView';
@@ -164,6 +165,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
     load();
   }, [load]);
 
+  // the one main Sync keeps the list fresh
+  useSynced(() => load(true), '', { initial: false });
+
   const flash = (msg: string) => {
     setNotice(msg);
     setTimeout(() => setNotice((n) => (n === msg ? null : n)), 4000);
@@ -251,7 +255,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
 
   return (
     <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-body">
-      <AppHeader companyName={companyName} userEmail={userEmail} current="contacts" onNavigate={onNavigate} onSignOut={onSignOut} />
+      <AppHeader companyName={companyName} userEmail={userEmail} current="contacts" showSetup={getCachedSetup(userEmail)} onNavigate={onNavigate} onSignOut={onSignOut} />
 
       <main className="mx-auto max-w-5xl px-4 sm:px-6 pb-[max(5rem,env(safe-area-inset-bottom))]">
         <button

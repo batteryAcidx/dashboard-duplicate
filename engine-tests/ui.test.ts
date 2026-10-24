@@ -17,7 +17,7 @@ import {
 } from '../src/domain/setup.ts';
 import { START_HERE, WIKI_TOPICS, isWikiTopic } from '../src/integrations/wiki.ts';
 import {
-  adminMenu, ownerMenu, parseTarget,
+  activeOwnerTab, adminMenu, ownerMenu, ownerTabs, parseTarget,
   EMPTY_REGISTRATION, PATH_LABEL, REGISTRATION_STATUS, einDigits, errorCount, formFromSaved, formatEin, isHttpsLink, isPluggedIn, maskEin,
   registrationErrorText, registrationLocked, registrationPath, registrationPayload, validateRegistration,
 } from '../src/domain/index.ts';
@@ -811,24 +811,30 @@ describe('the Wiki content', () => {
 
 
 describe('the account menu never offers the page you are on', () => {
-  test('a client on each page sees the other two, and never their own', () => {
-    assert.deepEqual(ownerMenu('dashboard', false).map((i) => i.label), ['Contacts', 'Settings']);
-    assert.deepEqual(ownerMenu('contacts', false).map((i) => i.label), ['Dashboard', 'Settings']);
-    assert.deepEqual(ownerMenu('settings', false).map((i) => i.label), ['Dashboard', 'Contacts']);
+  test('a client has Dashboard, Contacts and Settings as tabs, in that order', () => {
+    assert.deepEqual(ownerTabs(false).map((t) => t.label), ['Dashboard', 'Contacts', 'Settings']);
+    assert.deepEqual(ownerTabs(false).map((t) => t.path), ['/queue', '/contacts', '/settings']);
   });
 
-  test('pages that are not in the menu (setup, registration) hide nothing', () => {
-    assert.deepEqual(ownerMenu('setup', false).map((i) => i.label), ['Dashboard', 'Contacts', 'Settings']);
-    assert.deepEqual(ownerMenu('registration', false).map((i) => i.label), ['Dashboard', 'Contacts', 'Settings']);
-    assert.deepEqual(ownerMenu(undefined, false).map((i) => i.label), ['Dashboard', 'Contacts', 'Settings']);
+  test('while the account is being set up, a Setup tab appears right after the Dashboard', () => {
+    assert.deepEqual(ownerTabs(true).map((t) => t.label), ['Dashboard', 'Setup', 'Contacts', 'Settings']);
+    assert.equal(ownerTabs(true)[1].path, '/setup');
   });
 
-  test('an admin who is also a client gets a way back to the admin, in gold', () => {
-    const items = ownerMenu('settings', true);
-    assert.deepEqual(items.map((i) => i.label), ['Dashboard', 'Contacts', 'Admin']);
-    assert.equal(items[2].path, '/admin');
-    assert.equal(items[2].accent, true);
-    assert.equal(ownerMenu('dashboard', false).some((i) => i.label === 'Admin'), false);
+  test('the page you are on is lit up, and the registration form lights up Setup', () => {
+    assert.equal(activeOwnerTab('contacts'), 'contacts');
+    assert.equal(activeOwnerTab('dashboard'), 'dashboard');
+    assert.equal(activeOwnerTab('setup'), 'setup');
+    assert.equal(activeOwnerTab('registration'), 'setup');
+    assert.equal(activeOwnerTab(undefined), undefined);
+  });
+
+  test('the client menu holds only what is not a page: a way back to the admin, for admins', () => {
+    assert.deepEqual(ownerMenu(false), []);
+    const items = ownerMenu(true);
+    assert.deepEqual(items.map((i) => i.label), ['Admin']);
+    assert.equal(items[0].path, '/admin');
+    assert.equal(items[0].accent, true);
   });
 
   test('the admin menu holds what the top bar does not, minus the page you are on', () => {
@@ -847,7 +853,7 @@ describe('the account menu never offers the page you are on', () => {
   });
 
   test('every item goes somewhere real', () => {
-    for (const i of [...adminMenu('clients'), ...ownerMenu(undefined, true)]) assert.match(i.path, /^\/[a-z/-]*$/, i.label);
+    for (const i of [...adminMenu('clients'), ...ownerMenu(true), ...ownerTabs(true)]) assert.match(i.path, /^\/[a-z/-]*$/, i.label);
   });
 
 });

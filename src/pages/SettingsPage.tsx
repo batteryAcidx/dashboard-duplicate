@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, ChevronDown, LogOut, RotateCcw } from 'lucide-react';
 import { authApi, isConfigured, ownerApi } from '../api';
-import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
+import { getCachedCompany, setCachedCompany, getCachedSetup } from '../lib/accountCache';
 import { formatBlock, zonedToUtc } from '../lib/tz';
 import { AppHeader } from '../components/AppHeader';
 import { PlatformFooter } from '../components/PlatformFooter';
@@ -508,7 +508,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       <AppHeader
         companyName={companyName}
         userEmail={loginEmail || userEmail}
-        current="settings"
+        current="settings" showSetup={getCachedSetup(userEmail)}
         onNavigate={onNavigate}
         onSignOut={onSignOut}
       />

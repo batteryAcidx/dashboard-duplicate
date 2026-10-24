@@ -5,7 +5,7 @@ import { PlatformFooter } from '../components/PlatformFooter';
 import { Chip, Notice, PageTitle } from '../components/ui';
 import { RegistrationFormView } from '../features/registration/RegistrationFormView';
 import { isConfigured, ownerApi } from '../api';
-import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
+import { getCachedCompany, setCachedCompany, getCachedSetup } from '../lib/accountCache';
 import {
   EMPTY_REGISTRATION, PATH_LABEL, REGISTRATION_STATUS, formFromSaved, registrationErrorText, registrationLocked, registrationPath, registrationPayload, validateRegistration,
 } from '../domain';
@@ -78,7 +78,7 @@ export const RegistrationPage: React.FC<Props> = ({ onNavigate, onSignOut, userE
 
   return (
     <div className="min-h-screen w-full bg-[#090e1c] font-body text-[#dee1f7]">
-      <AppHeader companyName={company} userEmail={userEmail} current="registration" onNavigate={goto} onSignOut={onSignOut} />
+      <AppHeader companyName={company} userEmail={userEmail} current="registration" showSetup={getCachedSetup(userEmail)} onNavigate={goto} onSignOut={onSignOut} />
       <main className="mx-auto max-w-3xl px-5 pb-[max(5rem,env(safe-area-inset-bottom))] sm:px-8">
         <button
           type="button"

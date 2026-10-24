@@ -147,13 +147,61 @@ describe('the small components', () => {
 
 
 // ---------------------------------------------------------------- the client header
-describe('the client header', () => {
-  test('shows the company, the person, and no menu until it is opened', () => {
-    const html = renderToStaticMarkup(<AppHeader companyName="Summit Roofing" userEmail="mike@summit.example" current="settings" />);
+describe('the client header and tabs', () => {
+  const header = (props: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(<SyncProvider><AppHeader companyName="Summit Roofing" userEmail="mike@summit.example" current="settings" {...props} /></SyncProvider>);
+
+  test('shows the company, the person, the Sync button and the account menu', () => {
+    const html = header();
     assert.match(html, /Summit Roofing/);
     assert.match(html, /mike@summit\.example/);
     assert.match(html, /aria-label="Account menu"/);
-    assert.doesNotMatch(html, />Contacts</);
+    assert.match(html, /aria-label="Sync everything now"/);
+    assert.match(html, /Synced just now/);
+  });
+
+  test('the pages are tabs on a computer AND a bar along the bottom on a phone', () => {
+    const html = header();
+    assert.equal((html.match(/aria-label="Pages"/g) ?? []).length, 2, 'one bar for desktop, one for phones');
+    for (const label of ['Dashboard', 'Contacts', 'Settings']) assert.equal((html.match(new RegExp(`>${label}<`, 'g')) ?? []).length, 2, `${label} in both bars`);
+    assert.match(html, /fixed inset-x-0 bottom-0/);
+    assert.match(html, /grid-cols-3/);
+    assert.match(html, /md:hidden/);
+  });
+
+  test('the page you are on is lit up in both bars, and only that one', () => {
+    const html = header({ current: 'contacts' });
+    assert.equal((html.match(/aria-current="page"/g) ?? []).length, 2);
+    assert.match(html, /aria-current="page"[^>]*>(<svg[^>]*>\s*<\/svg>)?Contacts/);
+    assert.doesNotMatch(html, /aria-current="page"[^>]*>(<svg[^>]*>\s*<\/svg>)?Settings/);
+  });
+
+  test('a Setup tab shows only while the account is being set up', () => {
+    assert.doesNotMatch(header(), />Setup</);
+    const html = header({ showSetup: true });
+    assert.equal((html.match(/>Setup</g) ?? []).length, 2);
+    assert.match(html, /grid-cols-4/);
+    assert.match(header({ showSetup: true, current: 'registration' }), /aria-current="page"[^>]*>(<svg[^>]*>\s*<\/svg>)?Setup/);
+  });
+
+  test('inside a conversation the bottom bar steps aside, so it never covers the message controls', () => {
+    const html = header({ hideTabs: true });
+    assert.equal((html.match(/aria-label="Pages"/g) ?? []).length, 1, 'only the desktop tabs remain');
+    assert.doesNotMatch(html, /fixed inset-x-0 bottom-0/);
+    assert.match(html, /aria-label="Sync everything now"/);
+  });
+
+  test('the account menu holds just Sign out, plus a way back to the admin for admins', () => {
+    const menu = (isAdmin: boolean) => {
+      const html = renderToStaticMarkup(<SyncProvider><AppHeader companyName="S" userEmail="m@s.co" current="dashboard" isAdmin={isAdmin} initialOpen /></SyncProvider>);
+      return html.slice(html.indexOf('menu-panel'));
+    };
+    const client = menu(false);
+    assert.match(client, />Sign out</);
+    for (const page of ['Contacts', 'Settings', 'Dashboard', 'Admin']) assert.doesNotMatch(client.slice(0, client.indexOf('</div></div>')), new RegExp(`>${page}<`), `${page} is a tab, not a menu item`);
+    const admin = menu(true);
+    assert.match(admin, />Admin</);
+    assert.match(admin, />Sign out</);
   });
 });
 
@@ -475,7 +523,7 @@ describe('admin: the legacy GoHighLevel card and the updated indicator', () => {
   test('there is ONE sync button, in the header, and no screen has its own refresh', () => {
     const html = renderToStaticMarkup(<SyncProvider><SyncIndicator /></SyncProvider>);
     assert.match(html, /aria-label="Sync everything now"/);
-    assert.match(html, /Syncing/);
+    assert.match(html, /Synced just now/, 'a page with nothing to load is in sync from the start, never stuck on Syncing');
     assert.equal(renderToStaticMarkup(<SyncIndicator />), '', 'outside the admin there is nothing to show');
     const shell = renderToStaticMarkup(<AdminShell section="clients" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
     assert.equal((shell.match(/aria-label="Sync everything now"/g) ?? []).length, 1);
@@ -1006,7 +1054,7 @@ describe('integrations: a guide you can tick off', () => {
 });
 
 
-describe('the open account menus really follow the rule', () => {
+describe('the open admin menus really follow the rule', () => {
   const adminMenuHtml = (section: 'clients' | 'integrations' | 'settings' | 'wiki') => {
     const html = renderToStaticMarkup(<AdminShell section={section} initialOpen userEmail="me@wedgescale.com" onNavigate={() => {}}><p>x</p></AdminShell>);
     return html.slice(html.indexOf('menu-panel'), html.indexOf('</header>'));
@@ -1031,24 +1079,6 @@ describe('the open account menus really follow the rule', () => {
     assert.match(m, />Settings</);
   });
 
-  test('a client on Settings does not see Settings, on Contacts does not see Contacts', () => {
-    const menu = (current: 'dashboard' | 'contacts' | 'settings', isAdmin = false) => {
-      const html = renderToStaticMarkup(<AppHeader companyName="Summit" userEmail="m@s.co" current={current} isAdmin={isAdmin} initialOpen />);
-      return html.slice(html.indexOf('menu-panel'));
-    };
-    const onSettings = menu('settings');
-    assert.doesNotMatch(onSettings, />Settings</);
-    assert.match(onSettings, />Dashboard</);
-    assert.match(onSettings, />Contacts</);
-    assert.match(onSettings, />Sign out</);
-    const onContacts = menu('contacts');
-    assert.doesNotMatch(onContacts, />Contacts</);
-    assert.match(onContacts, />Settings</);
-    const onDash = menu('dashboard');
-    assert.doesNotMatch(onDash, />Dashboard</);
-    assert.doesNotMatch(onDash, />Admin</);
-    assert.match(menu('dashboard', true), />Admin</);
-  });
 });
 
 
@@ -1070,5 +1100,32 @@ describe('the client side ends with the platform footer, like the sign-in page',
   test('the admin does not get it: that is the client side only', () => {
     const html = renderToStaticMarkup(<AdminShell section="clients" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
     assert.doesNotMatch(html, /WedgeScale Dashboard Platform/);
+  });
+});
+
+describe('the client pages use the one main Sync, not their own refresh', () => {
+  const page = (name: string) => readFileSync(`../src/pages/${name}.tsx`, 'utf8');
+
+  test('no client page has its own timer, tab-visibility listener, or pull-to-refresh', () => {
+    for (const name of ['QueuePage', 'SetupPage', 'ContactsPage', 'SettingsPage', 'RegistrationPage']) {
+      const text = page(name);
+      assert.doesNotMatch(text, /setInterval\(/, `${name} has its own timer`);
+      assert.doesNotMatch(text, /visibilitychange/, `${name} listens for the tab coming back by itself`);
+      assert.doesNotMatch(text, /PullToRefresh|PullIndicator/, `${name} still has pull-to-refresh`);
+    }
+  });
+
+  test('the pages that show live data register with the sync', () => {
+    for (const name of ['QueuePage', 'SetupPage', 'ContactsPage']) assert.match(page(name), /useSynced\(/, `${name} should join the sync`);
+  });
+
+  test('the dashboard hides the bottom bar inside a conversation', () => {
+    assert.match(page('QueuePage'), /hideTabs=\{Boolean\(selectedLeadId\)\}/);
+  });
+
+  test('every client page tells the header where it is, so the right tab is lit', () => {
+    for (const [name, current] of [['QueuePage', 'dashboard'], ['ContactsPage', 'contacts'], ['SettingsPage', 'settings'], ['SetupPage', 'setup'], ['RegistrationPage', 'registration']]) {
+      assert.match(page(name), new RegExp(`current="${current}"`), name);
+    }
   });
 });

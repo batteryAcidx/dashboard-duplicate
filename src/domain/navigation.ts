@@ -1,5 +1,5 @@
-// Where people can go from the account menu, and how an address is read. Pure.
-// One rule for everyone: the menu never offers the page you are already on.
+// Where people can go (tabs and the account menu), and how an address is read. Pure.
+// The admin's menu never offers the page you are on. The client's pages are tabs, with the current one lit up.
 
 export interface MenuItem {
   key: string;
@@ -9,21 +9,33 @@ export interface MenuItem {
   accent?: boolean;
 }
 
-/* ---------------------------------------------------------------- the client's menu */
+/* ---------------------------------------------------------------- the client's tabs and menu */
 
 export type OwnerPage = 'dashboard' | 'contacts' | 'settings' | 'setup' | 'registration';
 
-const OWNER_ITEMS: (MenuItem & { page: OwnerPage })[] = [
-  { key: 'dashboard', page: 'dashboard', label: 'Dashboard', path: '/queue' },
-  { key: 'contacts', page: 'contacts', label: 'Contacts', path: '/contacts' },
-  { key: 'settings', page: 'settings', label: 'Settings', path: '/settings' },
-];
+export interface OwnerTab {
+  page: Exclude<OwnerPage, 'registration'>;
+  label: string;
+  path: string;
+}
 
-/** The client's menu items (sign out is separate). The page you are on is left out. Admins also get a way back to the admin. */
-export function ownerMenu(current: OwnerPage | undefined, isAdmin: boolean): MenuItem[] {
-  const items: MenuItem[] = OWNER_ITEMS.filter((i) => i.page !== current).map(({ page: _page, ...rest }) => rest);
-  if (isAdmin) items.push({ key: 'admin', label: 'Admin', path: '/admin', accent: true });
-  return items;
+/**
+ * The client's main pages, as tabs: along the top on a computer, along the bottom on a phone.
+ * "Setup" is only there while the account is still being set up.
+ */
+export function ownerTabs(showSetup: boolean): OwnerTab[] {
+  const tabs: OwnerTab[] = [{ page: 'dashboard', label: 'Dashboard', path: '/queue' }];
+  if (showSetup) tabs.push({ page: 'setup', label: 'Setup', path: '/setup' });
+  tabs.push({ page: 'contacts', label: 'Contacts', path: '/contacts' }, { page: 'settings', label: 'Settings', path: '/settings' });
+  return tabs;
+}
+
+/** Which tab is lit up. The registration form is part of setup, so it lights up Setup. */
+export const activeOwnerTab = (current: OwnerPage | undefined): OwnerTab['page'] | undefined => (current === 'registration' ? 'setup' : current);
+
+/** The account menu holds what is not a page: a way back to the admin, for admins. (Sign out is separate.) */
+export function ownerMenu(isAdmin: boolean): MenuItem[] {
+  return isAdmin ? [{ key: 'admin', label: 'Admin', path: '/admin', accent: true }] : [];
 }
 
 /* ---------------------------------------------------------------- the admin's menu */
