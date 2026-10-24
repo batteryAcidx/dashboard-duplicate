@@ -554,7 +554,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
           onChangeType={handleChangeType}
         />
       )}
-      <PlatformFooter />
+      <PlatformFooter clearTabs={!selectedLeadId} />
     </div>
   );
 };

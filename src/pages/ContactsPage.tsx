@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, RotateCcw } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { isConfigured, ownerApi } from '../api';
 import { getCachedCompany, setCachedCompany, getCachedSetup } from '../lib/accountCache';
 import { ContactTypeControl } from '../components/ContactTypeControl';
@@ -258,14 +258,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
       <AppHeader companyName={companyName} userEmail={userEmail} current="contacts" showSetup={getCachedSetup(userEmail)} onNavigate={onNavigate} onSignOut={onSignOut} />
 
       <main className="mx-auto max-w-5xl px-4 sm:px-6 pb-[max(5rem,env(safe-area-inset-bottom))]">
-        <button
-          type="button"
-          onClick={() => goto('/queue')}
-          className="inline-flex items-center gap-1.5 mt-3 -ml-1 pl-1 pr-3 py-2.5 text-sm font-display font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4 text-[#ffc174]" />
-          Dashboard
-        </button>
 
         <div className="mb-10 mt-8">
           <span className="font-body text-xs tracking-wide text-[#f59e0b] font-bold block mb-2">PEOPLE</span>

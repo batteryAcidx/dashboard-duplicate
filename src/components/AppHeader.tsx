@@ -56,10 +56,9 @@ export const AppHeader: React.FC<Props> = ({ companyName, userEmail, current, is
 
   return (
     <>
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 pb-3 pt-5 sm:px-8 lg:px-10">
-        <div className="flex min-w-0 items-center gap-10">
-          <span className="truncate font-display text-lg font-bold tracking-tight text-slate-100">{companyName}</span>
-          <nav className="hidden items-center gap-7 md:flex" aria-label="Pages">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 pb-3 pt-5 sm:px-8 md:grid md:grid-cols-[1fr_auto_1fr] lg:px-10">
+        <span className="min-w-0 truncate font-display text-lg font-bold tracking-tight text-slate-100">{companyName}</span>
+        <nav className="hidden items-center gap-8 md:flex" aria-label="Pages">
             {tabs.map((t) => (
               <button
                 key={t.page}
@@ -72,10 +71,9 @@ export const AppHeader: React.FC<Props> = ({ companyName, userEmail, current, is
                 {active === t.page && <span aria-hidden="true" className="absolute inset-x-0 -bottom-0.5 h-0.5 rounded-full bg-[#f59e0b]" />}
               </button>
             ))}
-          </nav>
-        </div>
+        </nav>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1 md:justify-self-end">
           <SyncIndicator compact />
           <div className="relative" ref={ref}>
             <button

@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { ChoiceDialog, ChoiceRow } from './ChoiceDialog';
 
 export type LeadStatus = 'booked' | 'following_up' | 'needs_you' | 'not_a_lead' | 'won' | 'lost';
 
@@ -10,6 +11,16 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
   not_a_lead: 'Not a lead',
   won: 'Won',
   lost: 'Lost',
+};
+
+/** One short line under each choice, so nobody has to guess what it does. */
+export const STATUS_HINT: Record<LeadStatus, string> = {
+  booked: 'An inspection is on the calendar',
+  following_up: 'We are still texting them',
+  needs_you: 'Waiting for you to step in',
+  won: 'You got the job',
+  lost: 'It did not work out',
+  not_a_lead: 'Wrong number, spam or a vendor',
 };
 
 const ORDER: LeadStatus[] = ['booked', 'following_up', 'needs_you', 'won', 'lost', 'not_a_lead'];
@@ -24,44 +35,22 @@ interface Props {
   changedAtLabel: string;
   // returns an error message, or null when saved
   onChange: (status: LeadStatus, finalValue: number | null) => Promise<string | null>;
+  /** start with the dialog open, on the list or on the job-value step (used by tests) */
+  initialOpen?: boolean | 'value';
 }
 
-export const LeadStatusControl: React.FC<Props> = ({
-  status,
-  finalValue,
-  changedBy,
-  changedAtLabel,
-  onChange,
-}) => {
-  const [open, setOpen] = useState(false);
-  const [view, setView] = useState<'list' | 'value'>('list');
-  const [valueText, setValueText] = useState('');
+export const LeadStatusControl: React.FC<Props> = ({ status, finalValue, changedBy, changedAtLabel, onChange, initialOpen = false }) => {
+  const [open, setOpen] = useState(Boolean(initialOpen));
+  const [view, setView] = useState<'list' | 'value'>(initialOpen === 'value' ? 'value' : 'list');
+  const [valueText, setValueText] = useState(finalValue ? String(finalValue) : '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
 
   const close = () => {
     setOpen(false);
     setView('list');
     setError(null);
   };
-
-  // close on outside click or Escape
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) close();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
   const save = async (next: LeadStatus, value: number | null) => {
     setSaving(true);
@@ -98,134 +87,102 @@ export const LeadStatusControl: React.FC<Props> = ({
 
   const chipTone =
     status === 'won' || status === 'needs_you'
-      ? 'text-[#ffc174] bg-[#261d10] border-[#f59e0b]/50'
+      ? 'border-[#f59e0b]/45 bg-[#f59e0b]/10 text-[#ffc174]'
       : status === 'lost' || status === 'not_a_lead'
-      ? 'text-slate-400 bg-[#0a0e19] border-[#232a3f]'
-      : 'text-slate-200 bg-[#141a29]/80 border-white/[0.12]';
+      ? 'border-white/[0.07] bg-transparent text-slate-500'
+      : 'border-white/[0.1] bg-white/[0.03] text-slate-200';
+
+  const who = changedBy === 'owner' ? 'Updated by you' : changedBy === 'support' ? 'Updated by WedgeScale support' : 'Updated automatically';
 
   return (
-    <div className="relative inline-block" ref={ref}>
-      {/* The chip */}
+    <>
       <button
         type="button"
-        onClick={() => (open ? close() : setOpen(true))}
-        aria-haspopup="menu"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
         aria-expanded={open}
-        className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 font-display text-sm font-semibold cursor-pointer transition-colors ${chipTone}`}
+        aria-label={`Status: ${STATUS_LABEL[status]}. Change it.`}
+        className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-[13px] font-semibold transition-colors hover:bg-white/[0.06] ${chipTone}`}
       >
         <span>
           {STATUS_LABEL[status]}
           {status === 'won' && finalValue ? ` · ${money(finalValue)}` : ''}
         </span>
-        <ChevronDown className={`w-3.5 h-3.5 opacity-70 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
       </button>
 
       {open && (
-        <>
-          {/* dim backdrop, phones only */}
-          <div className="fixed inset-0 z-40 bg-black/50 sm:hidden" onClick={close} aria-hidden="true" />
-
-          {/* bottom sheet on phones, dropdown on larger screens */}
-          <div
-            role="menu"
-            className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[#222c42] bg-[#0f1422] p-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:absolute sm:inset-x-auto sm:bottom-auto menu-panel sm:right-0 sm:top-full sm:mt-2 sm:w-64 sm:rounded-xl sm:border sm:p-1.5 sm:pb-1.5 sm:shadow-[0_12px_32px_rgba(0,0,0,0.65)]"
-          >
-            {view === 'list' ? (
-              <>
-                <div className="px-3 pt-2 pb-1.5 font-body text-[11px] tracking-wide text-slate-500 font-semibold">
-                  Set status
-                </div>
-
+        <ChoiceDialog title={view === 'list' ? 'Set status' : 'Final job value'} onClose={close} footer={view === 'list' ? `${who}${changedAtLabel ? ` · ${changedAtLabel}` : ''}` : undefined}>
+          {view === 'list' ? (
+            <>
+              <div role="radiogroup" aria-label="Set status">
                 {ORDER.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    role="menuitem"
-                    disabled={saving}
-                    onClick={() => handlePick(s)}
-                    className="w-full flex items-center justify-between gap-3 px-3 py-3 sm:py-2 rounded-lg text-left text-sm font-display font-bold text-slate-200 hover:bg-[#192236] cursor-pointer disabled:opacity-50"
-                  >
-                    <span>{STATUS_LABEL[s]}</span>
-                    {s === status && <Check className="w-4 h-4 text-[#ffc174]" />}
-                  </button>
+                  <ChoiceRow key={s} selected={s === status} label={STATUS_LABEL[s]} hint={STATUS_HINT[s]} disabled={saving} onClick={() => handlePick(s)} />
                 ))}
-
-                {status === 'won' && (
-                  <button
-                    type="button"
-                    onClick={() => handlePick('won')}
-                    className="w-full px-3 py-2 text-left font-data text-xs text-slate-400 hover:text-[#ffc174] cursor-pointer"
-                  >
-                    {finalValue ? 'Edit job value' : 'Add job value'}
-                  </button>
-                )}
-
-                {error && (
-                  <p role="alert" className="px-3 py-1.5 text-xs text-red-400 font-body">
-                    {error}
-                  </p>
-                )}
-
-                {/* who changed it, and when */}
-                <div className="mt-1 border-t border-[#1b2336] px-3 pt-2.5 pb-1 font-data text-[11px] text-slate-500">
-                    {changedBy === 'owner'
-                    ? 'Updated by you'
-                    : changedBy === 'support'
-                    ? 'Updated by WedgeScale support'
-                    : 'Updated automatically'}
-                  {changedAtLabel ? ` · ${changedAtLabel}` : ''}
-                </div>
-              </>
-            ) : (
-              <div className="p-3 space-y-3">
-                <div className="font-body text-[11px] tracking-wide text-slate-500 font-semibold">
-                  Final job value
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-data text-sm text-slate-400">$</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoFocus
-                    value={valueText}
-                    onChange={(e) => setValueText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveValue();
-                    }}
-                    placeholder="12500"
-                    className="flex-1 min-w-0 bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg x-3 py-2 text-base sm:text-sm font-data text-slate-100 placeholder:text-slate-600"
-                  />
-                </div>
-                {error && (
-                  <p role="alert" className="text-xs text-red-400 font-body">
-                    {error}
-                  </p>
-                )}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleSaveValue}
-                    disabled={saving}
-                    className="px-4 py-2 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50"
-                  >
-                    {saving ? 'Saving…' : 'Save'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setView('list');
-                      setError(null);
-                    }}
-                    className="px-3 py-2 font-body text-xs tracking-wide text-slate-400 hover:text-slate-200 cursor-pointer"
-                  >
-                    Back
-                  </button>
-                </div>
               </div>
-            )}
-          </div>
-        </>
+              {status === 'won' && (
+                <button
+                  type="button"
+                  onClick={() => handlePick('won')}
+                  className="mx-3 mb-2 mt-1 cursor-pointer text-[13px] font-semibold text-[#ffc174] underline-offset-4 hover:underline"
+                >
+                  {finalValue ? 'Edit job value' : 'Add job value'}
+                </button>
+              )}
+              {error && (
+                <p role="alert" className="px-3 pb-2 pt-1 text-[13px] text-red-400">
+                  {error}
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="space-y-4 px-3 pb-3 pt-2">
+              <p className="text-[13px] leading-snug text-slate-500">What did the job come to? It shows on your dashboard as money won.</p>
+              <div className="flex items-center gap-2 rounded-xl border border-white/[0.1] bg-[#090d18] px-4 focus-within:border-[#f59e0b]">
+                <span className="font-data text-lg text-slate-500">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  autoFocus
+                  aria-label="Final job value in dollars"
+                  value={valueText}
+                  onChange={(e) => setValueText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveValue();
+                  }}
+                  placeholder="12,500"
+                  className="h-14 min-w-0 flex-1 bg-transparent font-data text-xl text-slate-100 outline-none placeholder:text-slate-700"
+                />
+              </div>
+              {error && (
+                <p role="alert" className="text-[13px] text-red-400">
+                  {error}
+                </p>
+              )}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleSaveValue}
+                  disabled={saving}
+                  className="inline-flex h-11 cursor-pointer items-center justify-center rounded-xl bg-[#f59e0b] px-6 font-display text-sm font-bold text-[#150f05] transition-colors hover:bg-[#fbbf24] disabled:opacity-50"
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView('list');
+                    setError(null);
+                  }}
+                  className="inline-flex h-11 cursor-pointer items-center px-3 text-sm font-semibold text-slate-400 transition-colors hover:text-slate-200"
+                >
+                  Back
+                </button>
+              </div>
+            </div>
+          )}
+        </ChoiceDialog>
       )}
-    </div>
+    </>
   );
 };

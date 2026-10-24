@@ -152,7 +152,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
 
   return (
     <div className="mx-auto w-full max-w-5xl bg-[#0c101d]">
-      <div className="flex flex-col justify-start space-y-6 p-5 pb-12 sm:space-y-8 sm:p-8 lg:min-h-[600px] lg:p-10">
+      <div className="flex flex-col justify-start space-y-6 p-5 pb-5 sm:space-y-8 sm:p-8 sm:pb-8 lg:min-h-[600px] lg:p-10">
         {!hideTitleRow && (
           <div className={`items-center justify-between gap-4 ${inThreadOnPhone ? 'hidden lg:flex' : 'flex'}`}>
             <div>
@@ -364,10 +364,10 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                       />
 
                       {/* everything else about the person, in one slim row */}
-                      <div className="mb-5 mt-3 flex flex-wrap items-center gap-2 lg:mt-3">
+                      <div className="mb-4 mt-3 flex flex-wrap items-center gap-1.5 lg:mt-3">
                         {selectedLead.scheduledTime && (
-                          <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#ffc174]/30 bg-[#ffc174]/10 px-3.5 text-sm font-semibold text-[#ffc174]">
-                            <CalendarCheck className="h-4 w-4" aria-hidden="true" />
+                          <span className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#ffc174]/30 bg-[#ffc174]/10 px-3 text-[13px] font-semibold text-[#ffc174]">
+                            <CalendarCheck className="h-3.5 w-3.5" aria-hidden="true" />
                             {selectedLead.scheduledTime}
                           </span>
                         )}
@@ -377,9 +377,9 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                             target="_blank"
                             rel="noopener noreferrer"
                             aria-label={`Directions to ${selectedLead.address}`}
-                            className="inline-flex h-10 max-w-full items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 text-sm text-slate-300 transition-colors hover:bg-white/[0.06]"
+                            className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-[13px] text-slate-300 transition-colors hover:bg-white/[0.06]"
                           >
-                            <MapPin className="h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
+                            <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden="true" />
                             <span className="truncate">{selectedLead.address}</span>
                           </a>
                         )}
@@ -411,7 +411,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                       />
 
                       {/* messages: page scroll on phones, a scroll box only on desktop */}
-                      <div className="space-y-4 pb-6 lg:max-h-[440px] lg:space-y-4 lg:overflow-y-auto lg:pb-5 lg:pr-2">
+                      <div className="space-y-4 pb-1 lg:max-h-[440px] lg:space-y-4 lg:overflow-y-auto lg:pb-5 lg:pr-2">
                         {selectedLead.missedCallTime && (
                           <div className="flex items-center justify-center pb-1">
                             <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.07] bg-[#0a0e19] px-3.5 py-1.5 text-xs font-medium text-slate-400">

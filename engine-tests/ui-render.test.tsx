@@ -30,6 +30,7 @@ import { IntegrationsPage } from '../src/integrations/IntegrationsPage.tsx';
 import { WikiPage } from '../src/integrations/WikiPage.tsx';
 import { SetupNeeds } from '../src/components/SetupNeeds.tsx';
 import { PlatformFooter } from '../src/components/PlatformFooter.tsx';
+import { LeadStatusControl } from '../src/components/LeadStatusControl.tsx';
 import { OverviewChart } from '../src/components/OverviewChart.tsx';
 import { buildChart } from '../src/lib/chart.ts';
 import { readFileSync } from 'node:fs';
@@ -1102,7 +1103,7 @@ describe('the client side ends with the platform footer, like the sign-in page',
   test('every client page includes it exactly once', () => {
     for (const page of ['QueuePage', 'ContactsPage', 'SettingsPage', 'SetupPage', 'RegistrationPage']) {
       const text = readFileSync(`../src/pages/${page}.tsx`, 'utf8');
-      assert.equal((text.match(/<PlatformFooter \/>/g) ?? []).length, 1, `${page} should end with the footer`);
+      assert.equal((text.match(/<PlatformFooter( clearTabs=\{[^}]*\})? \/>/g) ?? []).length, 1, `${page} should end with the footer`);
     }
   });
 
@@ -1249,7 +1250,7 @@ describe('the conversation header', () => {
   test('the controls sit in the same slim row', () => {
     const r = row(open('pc'));
     assert.match(r, /Who is this\? Currently Past client/);
-    assert.match(r, /flex flex-wrap items-center gap-2/);
+    assert.match(r, /flex flex-wrap items-center gap-1\.5/);
   });
 
   test('the urgency badge sits beside the name, once', () => {
@@ -1291,7 +1292,133 @@ describe('the quiet client bar', () => {
   });
 
   test('the company name is lighter than before', () => {
-    assert.match(bar(), /<span class="truncate font-display text-lg font-bold[^"]*">Summit Roofing</);
+    assert.match(bar(), /<span class="min-w-0 truncate font-display text-lg font-bold[^"]*">Summit Roofing</);
     assert.doesNotMatch(bar(), /text-xl font-extrabold/);
+  });
+});
+
+
+describe('the centered dialogs', () => {
+  const typeDialog = (props: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(<ContactTypeControl type="past_client" needsReview onChange={async () => null} initialOpen {...props} />);
+  const statusDialog = (props: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(<LeadStatusControl status="following_up" finalValue={null} changedBy="owner" changedAtLabel="9:57 AM" onChange={async () => null} initialOpen {...props} />);
+
+  test('closed, each control is just a small chip', () => {
+    const html = renderToStaticMarkup(<ContactTypeControl type="homeowner" needsReview={false} onChange={async () => null} />) + renderToStaticMarkup(<LeadStatusControl status="booked" finalValue={null} changedBy="system" changedAtLabel="" onChange={async () => null} />);
+    assert.doesNotMatch(html, /role="dialog"/);
+    assert.equal((html.match(/h-8 /g) ?? []).length >= 2, true, 'chips are 32px tall');
+    assert.doesNotMatch(html, /h-10 items-center gap-2 rounded-xl/, 'the old big chip is gone');
+  });
+
+  test('"Who is this?" opens a dialog in the middle of the screen, not a sheet from the bottom', () => {
+    const html = typeDialog();
+    assert.match(html, /role="dialog"[^>]*aria-modal="true"/);
+    assert.match(html, /fixed inset-0 z-\[60\] flex items-center justify-center/);
+    assert.doesNotMatch(html, /fixed inset-x-0 bottom-0/, 'no bottom sheet');
+    assert.match(html, /<h2[^>]*>Who is this\?<\/h2>/);
+    assert.match(html, /aria-label="Close"/);
+    assert.match(html, /bg-black\/60/, 'the page is dimmed behind it');
+  });
+
+  test('every kind of caller is a clear choice with a line of help, and the current one is marked', () => {
+    const html = typeDialog();
+    assert.match(html, /role="radiogroup"/);
+    assert.ok((html.match(/role="radio"/g) ?? []).length >= 4);
+    assert.equal((html.match(/aria-checked="true"/g) ?? []).length, 1, 'exactly one is chosen');
+    assert.match(html, /aria-checked="true"[^>]*>[\s\S]*?Past client/);
+    assert.match(html, /Sorted automatically\. Tap a type to confirm it or change it\./);
+    assert.match(html, /bg-\[#f59e0b\]/, 'the chosen one has the gold dot');
+  });
+
+  test('"Set status" lists the six statuses, each with a plain explanation', () => {
+    const html = statusDialog();
+    assert.match(html, /<h2[^>]*>Set status<\/h2>/);
+    assert.equal((html.match(/role="radio"/g) ?? []).length, 6);
+    for (const [label, hint] of [['Booked', 'An inspection is on the calendar'], ['Following up', 'We are still texting them'], ['Needs you', 'Waiting for you to step in'], ['Won', 'You got the job'], ['Lost', 'It did not work out'], ['Not a lead', 'Wrong number, spam or a vendor']]) {
+      assert.match(html, new RegExp(`>${label}<`));
+      assert.match(html, new RegExp(hint));
+    }
+    assert.match(html, /aria-checked="true"[^>]*>[\s\S]*?Following up/);
+  });
+
+  test('it says who changed it and when, quietly at the bottom', () => {
+    assert.match(statusDialog(), /Updated by you · 9:57 AM/);
+    assert.match(statusDialog({ changedBy: 'system', changedAtLabel: '' }), /Updated automatically</);
+    assert.match(statusDialog({ changedBy: 'support' }), /Updated by WedgeScale support/);
+  });
+
+  test('"Won" asks for the job value on its own step, with a big field and a clear Save', () => {
+    const html = statusDialog({ initialOpen: 'value', finalValue: 12500 });
+    assert.match(html, /<h2[^>]*>Final job value<\/h2>/);
+    assert.match(html, /aria-label="Final job value in dollars"/);
+    assert.match(html, /value="12500"/);
+    assert.match(html, />Save</);
+    assert.match(html, />Back</);
+    assert.doesNotMatch(html, /role="radio"/, 'the list is gone on this step');
+    assert.doesNotMatch(html, /Updated by you/);
+  });
+
+  test('a won job shows its value on the chip', () => {
+    const html = renderToStaticMarkup(<LeadStatusControl status="won" finalValue={10000} changedBy="owner" changedAtLabel="" onChange={async () => null} />);
+    assert.match(html, /Won · \$10,000/);
+  });
+});
+
+describe('the bottom of a page ends naturally', () => {
+  test('on a page with the bottom bar the footer leaves room for it, and on a computer it does not', () => {
+    const html = renderToStaticMarkup(<PlatformFooter />);
+    assert.match(html, /pb-\[calc\(6rem\+env\(safe-area-inset-bottom\)\)\]/);
+    assert.match(html, /md:pb-\[max\(2rem/);
+  });
+
+  test('inside a conversation the bar is hidden, so the footer takes only a little room', () => {
+    const html = renderToStaticMarkup(<PlatformFooter clearTabs={false} />);
+    assert.match(html, /pb-\[max\(1\.5rem,env\(safe-area-inset-bottom\)\)\]/);
+    assert.doesNotMatch(html, /6rem/);
+    assert.doesNotMatch(html, /pb-28/);
+  });
+
+  test('the dashboard tells the footer when the bar is hidden', () => {
+    assert.match(readFileSync('../src/pages/QueuePage.tsx', 'utf8'), /<PlatformFooter clearTabs=\{!selectedLeadId\} \/>/);
+  });
+
+  test('less padding is stacked under a conversation than before', () => {
+    const text = readFileSync('../src/components/DashboardBody.tsx', 'utf8');
+    assert.doesNotMatch(text, /p-5 pb-12/);
+    assert.match(text, /p-5 pb-5 /);
+    assert.match(text, /space-y-4 pb-1 lg:max-h-\[440px\]/);
+  });
+
+  test('the detail chips under the header are small', () => {
+    const r = renderToStaticMarkup(
+      <DashboardBody companyName="S" stats={stats} leads={[{ ...base, id: 'c1', name: 'Chip Test', scheduledTime: 'Tue 2 PM' }]} selectedLeadId="c1" onSelectLead={() => {}} onChangeType={async () => null} onChangeStatus={async () => null} />
+    );
+    const rowHtml = r.slice(r.indexOf('</header>'), r.indexOf('aria-label="What we know"') > 0 ? r.indexOf('aria-label="What we know"') : undefined);
+    assert.ok((rowHtml.match(/h-8 /g) ?? []).length >= 4, 'time, address and both controls are 32px');
+    assert.doesNotMatch(rowHtml, /h-10 /);
+  });
+});
+
+describe('no back-to-dashboard button on the tab pages, and centered tabs', () => {
+  const page = (name: string) => readFileSync(`../src/pages/${name}.tsx`, 'utf8');
+
+  test('Contacts, Settings and Setup have no Dashboard button: the tab bar already does that', () => {
+    for (const name of ['ContactsPage', 'SettingsPage', 'SetupPage']) {
+      assert.doesNotMatch(page(name), /goto\('\/queue'\)/, `${name} still has a way back to the dashboard`);
+      assert.doesNotMatch(page(name), /ArrowLeft/, `${name} still has a back arrow`);
+    }
+  });
+
+  test('the registration form keeps its way back to Setup, because it is not a tab', () => {
+    assert.match(page('RegistrationPage'), /goto\('\/setup'\)/);
+  });
+
+  test('on a computer the tabs sit in the middle, with the name on the left and Sync and account on the right', () => {
+    const html = renderToStaticMarkup(<SyncProvider><AppHeader companyName="Summit" userEmail="a@b.co" current="dashboard" /></SyncProvider>);
+    assert.match(html, /md:grid md:grid-cols-\[1fr_auto_1fr\]/);
+    assert.match(html, /md:justify-self-end/);
+    const order = ['>Summit<', 'aria-label="Pages"', 'aria-label="Sync everything now"'].map((m) => html.indexOf(m));
+    assert.deepEqual([...order].sort((a, b) => a - b), order, 'name, then tabs, then Sync and account');
   });
 });
