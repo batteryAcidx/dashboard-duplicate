@@ -22,6 +22,7 @@ import {
   registrationErrorText, registrationLocked, registrationPath, registrationPayload, validateRegistration,
 } from '../src/domain/index.ts';
 import { applyLabelPlan, buildChart } from '../src/lib/chart.ts';
+import { activeUrgency, recordedUrgency } from '../src/lib/leadView.ts';
 import type { ChartBucket } from '../src/lib/chart.ts';
 import { getGuideProgress, setGuideProgress } from '../src/lib/preferences.ts';
 import { INTEGRATIONS, integrationInfo } from '../src/integrations/catalog.ts';
@@ -942,5 +943,30 @@ describe('the chart: date labels that never run off the edge', () => {
         if (b.showLabel && i > c.buckets.length - 1 - edge) assert.equal(b.align, 'end');
       });
     }
+  });
+});
+
+
+describe('the priority a lead was given, versus whether it needs attention now', () => {
+  test('recorded priority is kept whatever the status', () => {
+    assert.equal(recordedUrgency({ urgency: 'emergency' }), 'emergency');
+    assert.equal(recordedUrgency({ urgency: 'urgent' }), 'urgent');
+    assert.equal(recordedUrgency({ urgency: 'normal' }), 'normal');
+    assert.equal(recordedUrgency({}), 'normal');
+    assert.equal(recordedUrgency({ urgency: 'nonsense' }), 'normal');
+  });
+
+  test('older leads that only have the yes/no flag count as high priority', () => {
+    assert.equal(recordedUrgency({ priority: true }), 'urgent');
+    assert.equal(recordedUrgency({ urgency: 'emergency', priority: true }), 'emergency', 'the flag never lowers a real level');
+    assert.equal(recordedUrgency({ priority: false }), 'normal');
+  });
+
+  test('a closed lead keeps its recorded priority even though it no longer needs attention', () => {
+    const won = { status: 'won', urgency: 'emergency', appointments: [] };
+    assert.equal(recordedUrgency(won), 'emergency');
+    assert.equal(activeUrgency(won), 'normal', 'sorting and alerts still end when the job closes');
+    const live = { status: 'following_up', urgency: 'emergency', appointments: [] };
+    assert.equal(activeUrgency(live), 'emergency');
   });
 });

@@ -29,10 +29,12 @@ import { RegistrationCard } from '../src/features/admin/tabs/RegistrationCard.ts
 import { IntegrationsPage } from '../src/integrations/IntegrationsPage.tsx';
 import { WikiPage } from '../src/integrations/WikiPage.tsx';
 import { SetupNeeds } from '../src/components/SetupNeeds.tsx';
+import { LeadDetailsCard } from '../src/components/LeadDetailsCard.tsx';
 import { PlatformFooter } from '../src/components/PlatformFooter.tsx';
 import { LeadStatusControl } from '../src/components/LeadStatusControl.tsx';
 import { OverviewChart } from '../src/components/OverviewChart.tsx';
 import { buildChart } from '../src/lib/chart.ts';
+import { URGENCY_LABEL } from '../src/lib/leadView.ts';
 import { readFileSync } from 'node:fs';
 import { IntegrationsProvider } from '../src/integrations/IntegrationsContext.tsx';
 import { NotPluggedIn } from '../src/integrations/NotPluggedIn.tsx';
@@ -100,10 +102,10 @@ describe('the conversation list', () => {
     assert.match(html, />EMERGENCY</);
   });
 
-  test('older lead objects with only the priority flag still render, as PRIORITY', () => {
+  test('older lead objects with only the priority flag still render, as HIGH PRIORITY', () => {
     const legacy: DashboardLead = { ...base, id: 'old', name: 'Old Lead', priority: true };
     const html = render({ leads: [legacy] });
-    assert.match(html, />PRIORITY</);
+    assert.match(html, />HIGH PRIORITY</);
     assert.doesNotMatch(html, /aria-label="Filter conversations"/);
   });
 });
@@ -135,7 +137,7 @@ describe('the small components', () => {
   test('urgency badge', () => {
     assert.equal(renderToStaticMarkup(<UrgencyBadge urgency="normal" />), '');
     assert.match(renderToStaticMarkup(<UrgencyBadge urgency="emergency" />), />EMERGENCY</);
-    assert.match(renderToStaticMarkup(<UrgencyBadge urgency="urgent" />), />PRIORITY</);
+    assert.match(renderToStaticMarkup(<UrgencyBadge urgency="urgent" />), />HIGH PRIORITY</);
     assert.match(renderToStaticMarkup(<UrgencyBadge urgency="urgent" size="header" />), />HIGH PRIORITY</);
   });
   test('type control starts closed and flags what needs confirming', () => {
@@ -1420,5 +1422,84 @@ describe('no back-to-dashboard button on the tab pages, and centered tabs', () =
     assert.match(html, /md:justify-self-end/);
     const order = ['>Summit<', 'aria-label="Pages"', 'aria-label="Sync everything now"'].map((m) => html.indexOf(m));
     assert.deepEqual([...order].sort((a, b) => a - b), order, 'name, then tabs, then Sync and account');
+  });
+});
+
+describe('priority is shown whenever a lead has one, with the same words everywhere', () => {
+  const closedEmergency: DashboardLead = {
+    ...base, id: 'won1', name: 'Marcus Brooks', status: 'won', urgency: 'normal', urgencyRecorded: 'emergency', urgencyReason: 'Active leak right now',
+    details: [{ label: 'Needs', value: 'active leak' }],
+  };
+  const header = (html: string) => html.slice(html.indexOf('<header aria-label="Conversation"'), html.indexOf('</header>') + 9);
+
+  test('the words: Emergency and High priority, never a bare "Priority", and nothing for a routine lead', () => {
+    assert.match(renderToStaticMarkup(<UrgencyBadge urgency="emergency" />), />EMERGENCY</);
+    assert.match(renderToStaticMarkup(<UrgencyBadge urgency="urgent" />), />HIGH PRIORITY</);
+    for (const size of ['row', 'header', 'phone'] as const) assert.match(renderToStaticMarkup(<UrgencyBadge urgency="urgent" size={size} />), />HIGH PRIORITY</, `size ${size}`);
+    assert.equal(renderToStaticMarkup(<UrgencyBadge urgency="normal" />), '');
+    assert.equal(URGENCY_LABEL.urgent, 'High priority');
+    assert.equal(URGENCY_LABEL.emergency, 'Emergency');
+  });
+
+  test('a lead that was an emergency but is now won still shows it, quietly, in the conversation', () => {
+    const html = render({ leads: [closedEmergency], selectedLeadId: 'won1' });
+    const h = header(html);
+    assert.match(h, />EMERGENCY</);
+    assert.match(h, /title="Emergency, no longer active"/);
+    assert.match(h, /text-slate-500/);
+    assert.doesNotMatch(h, /bg-red-500\/10/, 'not the loud red of a live emergency');
+  });
+
+  test('and in the list, so you can still see which jobs were emergencies', () => {
+    const html = render({ leads: [closedEmergency] });
+    assert.match(html, /title="Emergency, no longer active"/);
+    assert.match(html, />EMERGENCY</);
+  });
+
+  test('a live emergency is loud, with no "no longer active" note', () => {
+    const live: DashboardLead = { ...base, id: 'live1', name: 'Live One', urgency: 'emergency', urgencyRecorded: 'emergency', urgencyReason: 'Active leak' };
+    const h = header(render({ leads: [live], selectedLeadId: 'live1' }));
+    assert.match(h, /bg-red-500\/10/);
+    assert.doesNotMatch(h, /no longer active/);
+  });
+
+  test('a routine lead shows no badge at all, live or closed', () => {
+    for (const status of ['following_up', 'won'] as const) {
+      const routine: DashboardLead = { ...base, id: 'r1', name: 'Routine One', status, urgency: 'normal', urgencyRecorded: 'normal' };
+      const html = render({ leads: [routine], selectedLeadId: 'r1' });
+      assert.doesNotMatch(header(html), /EMERGENCY|HIGH PRIORITY/);
+    }
+  });
+
+  test('the reason is kept too: "Emergency: Active leak right now" stays on a closed job', () => {
+    const html = render({ leads: [closedEmergency], selectedLeadId: 'won1' });
+    assert.match(html, /Emergency: Active leak right now/);
+  });
+
+  test('the details card uses the same words', () => {
+    assert.match(renderToStaticMarkup(<LeadDetailsCard rows={[{ label: 'Needs', value: 'x' }]} urgency="urgent" urgencyReason="Storm damage tonight" />), /High priority: Storm damage tonight/);
+    assert.match(renderToStaticMarkup(<LeadDetailsCard rows={[{ label: 'Needs', value: 'x' }]} urgency="emergency" urgencyReason="Active leak" />), /Emergency: Active leak/);
+  });
+});
+
+describe('page titles are written the same way on every page', () => {
+  const read = (name: string) => readFileSync(`../src/pages/${name}.tsx`, 'utf8');
+
+  test('Contacts and Settings use the shared title, with a small label in normal capitals', () => {
+    assert.match(read('ContactsPage'), /<PageTitle\s+eyebrow="People"\s+title="Contacts"/);
+    assert.match(read('SettingsPage'), /<PageTitle eyebrow="Account" title="Settings" \/>/);
+  });
+
+  test('no small label is written in all capitals, and none is hand-made', () => {
+    const labels: [string, string][] = [];
+    for (const name of ['ContactsPage', 'SettingsPage', 'SetupPage', 'RegistrationPage']) {
+      for (const m of read(name).matchAll(/eyebrow="([^"]+)"/g)) labels.push([name, m[1]]);
+      for (const m of read(name).matchAll(/text-\[#f59e0b\][^>]*>\s*([A-Za-z ]+?)\s*<\/span>/g)) labels.push([name, m[1]]);
+    }
+    assert.ok(labels.length >= 3, 'found the labels');
+    for (const [page, label] of labels) assert.notEqual(label, label.toUpperCase(), `${page}: "${label}" is all capitals`);
+    assert.doesNotMatch(read('ContactsPage'), /PEOPLE/);
+    assert.doesNotMatch(read('ContactsPage'), /tracking-wide text-\[#f59e0b\] font-bold/);
+    assert.doesNotMatch(read('SettingsPage'), /tracking-wide text-\[#f59e0b\] font-bold/);
   });
 });

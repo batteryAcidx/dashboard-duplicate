@@ -5,7 +5,7 @@ import { getCachedCompany, setCachedCompany, getCachedSetup } from '../lib/accou
 import { formatBlock, zonedToUtc } from '../lib/tz';
 import { AppHeader } from '../components/AppHeader';
 import { PlatformFooter } from '../components/PlatformFooter';
-import { inputCls as uiInputCls } from '../components/ui';
+import { PageTitle, inputCls as uiInputCls } from '../components/ui';
 
 // Keep in sync with Supabase: Authentication > Sign In / Providers > Email > Minimum password length
 const MIN_PASSWORD_LENGTH = 10;
@@ -515,14 +515,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
 
       <main className="mx-auto max-w-5xl px-4 sm:px-6 pb-[max(5rem,env(safe-area-inset-bottom))]">
 
-                <div className="mb-10 mt-8">
-          <span className="font-body text-xs tracking-wide text-[#f59e0b] font-bold block mb-2">
-            Account
-          </span>
-          <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-100 leading-none">
-            Settings
-          </h1>
-        </div>
+        <PageTitle eyebrow="Account" title="Settings" />
 
         {loading ? (
           <div role="status" aria-label="Loading settings" className="grid grid-cols-1 lg:grid-cols-2 gap-8">

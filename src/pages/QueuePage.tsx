@@ -10,8 +10,7 @@ import { PlatformFooter } from '../components/PlatformFooter';
 import { useSynced } from '../lib/sync';
 import { getCachedCompany, setCachedCompany, setCachedSetup } from '../lib/accountCache';
 import {
-  ContactType, activeUrgency, buildDetails, compareByUrgency, eventLabel, isCountedLead, normalizeType, whyWithYou,
-} from '../lib/leadView';
+  ContactType, activeUrgency, buildDetails, compareByUrgency, eventLabel, isCountedLead, normalizeType, whyWithYou, recordedUrgency } from '../lib/leadView';
 
 /* ---------- time helpers (use the ACCOUNT's time zone, not the browser's) ---------- */
 
@@ -428,6 +427,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       timeAgo: ago(latest(r)),
       priority: urgencyNow(r) !== 'normal',
       urgency: urgencyNow(r),
+      urgencyRecorded: recordedUrgency(r),
       urgencyReason: r.urgency_reason || undefined,
       contactType: type,
       needsReview: Boolean(r.phone_e164 && reviewPhones.has(r.phone_e164)),

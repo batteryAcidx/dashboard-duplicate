@@ -9,6 +9,8 @@ interface Props {
   /** one quiet line under the name, such as "Roof repair · (214) 555-0101" */
   subtitle: string;
   urgency: Urgency;
+  /** flagged earlier, but closed now */
+  urgencyMuted?: boolean;
   /** a tel: link. No link, no Call button. */
   callHref?: string;
   onBack: () => void;
@@ -19,7 +21,7 @@ interface Props {
  * One row, about as tall as a phone's title bar. On a phone it stays at the top while you read.
  * Everything else about the person (the address, when we are going, the controls) sits in one slim row below it.
  */
-export const ConversationHeader: React.FC<Props> = ({ name, subtitle, urgency, callHref, onBack }) => (
+export const ConversationHeader: React.FC<Props> = ({ name, subtitle, urgency, urgencyMuted, callHref, onBack }) => (
   <header
     aria-label="Conversation"
     className="sticky top-0 z-30 -mx-5 border-b border-white/[0.06] bg-[#0c101d]/95 px-5 py-2.5 backdrop-blur sm:-mx-8 sm:px-8 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none"
@@ -42,7 +44,7 @@ export const ConversationHeader: React.FC<Props> = ({ name, subtitle, urgency, c
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="min-w-0 truncate font-display text-base font-bold tracking-tight text-slate-100 lg:text-lg">{name}</h3>
-          <UrgencyBadge urgency={urgency} size="phone" />
+          <UrgencyBadge urgency={urgency} size="phone" muted={urgencyMuted} />
         </div>
         {subtitle && <p className="truncate text-[13px] text-slate-500">{subtitle}</p>}
       </div>

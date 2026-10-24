@@ -79,6 +79,12 @@ export function matchesFilter(t: ContactType, f: LeadFilter): boolean {
 
 export const URGENCY_RANK: Record<Urgency, number> = { emergency: 0, urgent: 1, normal: 2 };
 
+/**
+ * The words for each priority, used everywhere (list, conversation, details). There is no "low":
+ * a routine call is simply not flagged, so nothing is shown for it.
+ */
+export const URGENCY_LABEL: Record<Urgency, string> = { emergency: 'Emergency', urgent: 'High priority', normal: 'Routine' };
+
 export function normalizeUrgency(u?: string | null): Urgency {
   return u === 'emergency' || u === 'urgent' ? u : 'normal';
 }
@@ -90,6 +96,15 @@ export interface UrgencyRow {
   priority?: boolean | null;
   urgency?: string | null;
   appointments: { starts_at: string; status: string }[];
+}
+
+/**
+ * The priority a lead was given, whether or not it is still live. Use this to SHOW it (a won job was still an emergency).
+ * Use activeUrgency to decide what needs attention NOW.
+ */
+export function recordedUrgency(r: { urgency?: string | null; priority?: boolean | null }): Urgency {
+  const u = normalizeUrgency(r.urgency);
+  return u === 'normal' && r.priority ? 'urgent' : u;
 }
 
 /** Urgency only counts while the lead is still live. Once every appointment is in the past, the urgent moment is over. */

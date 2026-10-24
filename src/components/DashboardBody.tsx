@@ -31,6 +31,8 @@ export interface DashboardLead {
   insurance: string;
   scheduledTime: string;
   urgency?: Urgency;
+  /** the priority it was given, even if it is closed now */
+  urgencyRecorded?: Urgency;
   urgencyReason?: string;
   contactType?: ContactType;
   needsReview?: boolean;
@@ -109,6 +111,12 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
 
   const typeOf = (l: DashboardLead): ContactType => l.contactType ?? 'homeowner';
   const urgencyOf = (l: DashboardLead): Urgency => l.urgency ?? (l.priority ? 'urgent' : 'normal');
+  // what to SHOW: the priority it was given. It goes quiet (not hidden) once the lead is closed.
+  const urgencyShown = (l: DashboardLead): { level: Urgency; muted: boolean } => {
+    const active = urgencyOf(l);
+    const level = l.urgencyRecorded ?? active;
+    return { level, muted: level !== 'normal' && active === 'normal' };
+  };
   const counts = countByFilter(leads.map(typeOf));
   const filterBarOn = showFilterBar(counts);
   // if the chosen tab empties out, quietly fall back to All
@@ -308,7 +316,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                               <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#f59e0b] shadow-[0_0_8px_rgba(245,158,11,0.6)]" title="Unread conversation" />
                             )}
                             <span className="block truncate font-display text-base font-bold tracking-tight text-slate-100">{lead.name}</span>
-                            <UrgencyBadge urgency={urgencyOf(lead)} />
+                            <UrgencyBadge urgency={urgencyShown(lead).level} muted={urgencyShown(lead).muted} />
                           </div>
                           <span className="shrink-0 pt-0.5 text-xs text-slate-500">{lead.timeAgo}</span>
                         </div>
@@ -358,7 +366,8 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                       <ConversationHeader
                         name={selectedLead.name}
                         subtitle={[selectedLead.insurance && selectedLead.insurance !== 'Not specified' ? selectedLead.insurance : '', selectedLead.phone].filter(Boolean).join(' · ')}
-                        urgency={urgencyOf(selectedLead)}
+                        urgency={urgencyShown(selectedLead).level}
+                        urgencyMuted={urgencyShown(selectedLead).muted}
                         callHref={selectedLead.phone ? telHref(selectedLead.phone) : undefined}
                         onBack={handleBackToQueue}
                       />
@@ -406,7 +415,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                       <LeadDetailsCard
                         rows={selectedLead.details ?? []}
                         why={selectedLead.whyWithYou}
-                        urgency={urgencyOf(selectedLead)}
+                        urgency={urgencyShown(selectedLead).level}
                         urgencyReason={selectedLead.urgencyReason}
                       />
 

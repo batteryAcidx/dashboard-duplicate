@@ -1,4 +1,5 @@
 import React from 'react';
+import { URGENCY_LABEL } from '../lib/leadView';
 import type { DetailRow, Urgency } from '../lib/leadView';
 
 interface Props {
@@ -26,7 +27,7 @@ export const LeadDetailsCard: React.FC<Props> = ({ rows, why, urgency = 'normal'
             aria-hidden="true"
           />
           <span>
-            {urgency === 'emergency' ? 'Emergency' : 'Priority'}: {urgencyReason}
+            {URGENCY_LABEL[urgency]}: {urgencyReason}
           </span>
         </div>
       )}

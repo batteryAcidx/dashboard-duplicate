@@ -6,7 +6,7 @@ import { ContactTypeControl } from '../components/ContactTypeControl';
 import { AppHeader } from '../components/AppHeader';
 import { useSynced } from '../lib/sync';
 import { PlatformFooter } from '../components/PlatformFooter';
-import { Card as UiCard, inputCls as uiInputCls } from '../components/ui';
+import { Card as UiCard, PageTitle, inputCls as uiInputCls } from '../components/ui';
 import { ContactType, PICKABLE_TYPES, TYPE_LABEL, normalizeType } from '../lib/leadView';
 import { MAX_IMPORT_ROWS, formatPhone, parseContactCsv, toE164 } from '../lib/contacts';
 
@@ -259,14 +259,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
 
       <main className="mx-auto max-w-5xl px-4 sm:px-6 pb-[max(5rem,env(safe-area-inset-bottom))]">
 
-        <div className="mb-10 mt-8">
-          <span className="font-body text-xs tracking-wide text-[#f59e0b] font-bold block mb-2">PEOPLE</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-100 leading-none">Contacts</h1>
-          <p className="mt-3 max-w-2xl text-sm text-slate-400 leading-relaxed">
-            Tell us who is who, and the assistant handles each call the right way. Homeowners get booked. Past and recurring customers are
-            flagged for you and you get their details by text. Suppliers and crew are never texted or booked.
-          </p>
-        </div>
+        <PageTitle
+          eyebrow="People"
+          title="Contacts"
+          subtitle="Tell us who is who, and the assistant handles each call the right way. Homeowners get booked. Past and recurring customers are flagged for you and you get their details by text. Suppliers and crew are never texted or booked."
+        />
 
         {notice && (
           <p role="status" className="mb-4 font-data text-sm text-[#ffc174]">
