@@ -37,6 +37,7 @@ If a row is `false`, run that script and everything after it that is `false`, in
 | 019 | Fixes the activity log so every admin action is recorded | 021 block 1 |
 | 020 | Setup requests and emails, business details, Twilio details, safe client deletion, calendar plumbing | 021 |
 | 022 | Business registration form (encrypted EIN), links on setup steps | 023 |
+| 024 | Clears an old note ("Flagged as priority before the engine") from old leads. Optional: the screens already hide it | the query at the bottom of the file |
 
 ## Things to switch on first
 

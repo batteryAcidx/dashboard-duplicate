@@ -22,7 +22,7 @@ import {
   registrationErrorText, registrationLocked, registrationPath, registrationPayload, validateRegistration,
 } from '../src/domain/index.ts';
 import { applyLabelPlan, buildChart } from '../src/lib/chart.ts';
-import { activeUrgency, recordedUrgency } from '../src/lib/leadView.ts';
+import { activeUrgency, cleanUrgencyReason, recordedUrgency } from '../src/lib/leadView.ts';
 import type { ChartBucket } from '../src/lib/chart.ts';
 import { getGuideProgress, setGuideProgress } from '../src/lib/preferences.ts';
 import { INTEGRATIONS, integrationInfo } from '../src/integrations/catalog.ts';
@@ -968,5 +968,21 @@ describe('the priority a lead was given, versus whether it needs attention now',
     assert.equal(activeUrgency(won), 'normal', 'sorting and alerts still end when the job closes');
     const live = { status: 'following_up', urgency: 'emergency', appointments: [] };
     assert.equal(activeUrgency(live), 'emergency');
+  });
+});
+
+
+describe('old notes that say nothing are never shown', () => {
+  test('the sentence an early script wrote onto old leads is dropped', () => {
+    assert.equal(cleanUrgencyReason('Flagged as priority before the engine'), undefined);
+    assert.equal(cleanUrgencyReason('  Flagged as priority before the engine  '), undefined);
+  });
+
+  test('a real reason is kept, trimmed, and an empty one is nothing', () => {
+    assert.equal(cleanUrgencyReason('Active leak right now'), 'Active leak right now');
+    assert.equal(cleanUrgencyReason('  Storm damage tonight '), 'Storm damage tonight');
+    assert.equal(cleanUrgencyReason(''), undefined);
+    assert.equal(cleanUrgencyReason(null), undefined);
+    assert.equal(cleanUrgencyReason(undefined), undefined);
   });
 });

@@ -1503,3 +1503,26 @@ describe('page titles are written the same way on every page', () => {
     assert.doesNotMatch(read('SettingsPage'), /tracking-wide text-\[#f59e0b\] font-bold/);
   });
 });
+
+
+describe('an old lead that was only flagged', () => {
+  test('keeps its priority badge but not the useless sentence, in the page that builds the lead', () => {
+    const page = readFileSync('../src/pages/QueuePage.tsx', 'utf8');
+    assert.match(page, /urgencyReason: cleanUrgencyReason\(r\.urgency_reason\)/);
+    assert.doesNotMatch(page, /urgencyReason: r\.urgency_reason/);
+  });
+
+  test('a flagged lead with no reason shows the badge and no "High priority:" line', () => {
+    const flagged: DashboardLead = { ...base, id: 'old1', name: 'Older Lead', urgency: 'urgent', urgencyRecorded: 'urgent', urgencyReason: undefined };
+    const html = render({ leads: [flagged], selectedLeadId: 'old1' });
+    assert.match(html, />HIGH PRIORITY</);
+    assert.doesNotMatch(html, /High priority:/);
+    assert.doesNotMatch(html, /before the engine/);
+  });
+
+  test('the sentence is nowhere in what the screens can show', () => {
+    for (const f of ['components/DashboardBody.tsx', 'components/LeadDetailsCard.tsx', 'components/ConversationHeader.tsx']) {
+      assert.doesNotMatch(readFileSync(`../src/${f}`, 'utf8'), /before the engine/, f);
+    }
+  });
+});

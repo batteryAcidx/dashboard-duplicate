@@ -107,6 +107,17 @@ export function recordedUrgency(r: { urgency?: string | null; priority?: boolean
   return u === 'normal' && r.priority ? 'urgent' : u;
 }
 
+/**
+ * Notes an early database script wrote onto old leads. They say nothing the owner can use, so they are never shown.
+ * (The priority badge stays: only the useless sentence goes.)
+ */
+const LEGACY_URGENCY_REASONS = ['Flagged as priority before the engine'];
+
+export function cleanUrgencyReason(reason: string | null | undefined): string | undefined {
+  const text = (reason ?? '').trim();
+  return !text || LEGACY_URGENCY_REASONS.includes(text) ? undefined : text;
+}
+
 /** Urgency only counts while the lead is still live. Once every appointment is in the past, the urgent moment is over. */
 export function activeUrgency(r: UrgencyRow, now: number = Date.now()): Urgency {
   if (!ACTIVE_STATUSES.includes(r.status)) return 'normal';
