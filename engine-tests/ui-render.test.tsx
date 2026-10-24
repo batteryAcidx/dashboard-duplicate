@@ -8,21 +8,44 @@ import { ContactTypeControl } from '../src/components/ContactTypeControl.tsx';
 import { LeadDetailsCard } from '../src/components/LeadDetailsCard.tsx';
 import { UrgencyBadge } from '../src/components/UrgencyBadge.tsx';
 import { AppHeader } from '../src/components/AppHeader.tsx';
-import { ControlsTab } from '../src/components/admin/ControlsTab.tsx';
-import type { Controls } from '../src/components/admin/ControlsTab.tsx';
-import { CalendarTab } from '../src/components/admin/CalendarTab.tsx';
-import type { Cal } from '../src/components/admin/CalendarTab.tsx';
-import { BillingTab } from '../src/components/admin/BillingTab.tsx';
-import type { Billing } from '../src/components/admin/BillingTab.tsx';
-import { HealthTab } from '../src/components/admin/HealthTab.tsx';
-import { ActivityTab } from '../src/components/admin/ActivityTab.tsx';
-import type { ActivityResult } from '../src/components/admin/ActivityTab.tsx';
-import { AdminSettings } from '../src/components/admin/AdminSettings.tsx';
-import { AdminShell } from '../src/components/admin/AdminShell.tsx';
-import { LegacyGhlCard } from '../src/components/admin/LegacyGhlCard.tsx';
-import { AdminMfaGate } from '../src/components/AdminMfaGate.tsx';
-import { Updated } from '../src/components/Updated.tsx';
-import type { Health } from '../src/lib/adminTools.ts';
+import { ControlsTab } from '../src/features/admin/tabs/ControlsTab.tsx';
+import { CalendarTab } from '../src/features/admin/tabs/CalendarTab.tsx';
+import { BillingTab } from '../src/features/admin/tabs/BillingTab.tsx';
+import { HealthTab } from '../src/features/admin/tabs/HealthTab.tsx';
+import { ActivityTab } from '../src/features/admin/tabs/ActivityTab.tsx';
+import { AdminSettings } from '../src/features/admin/settings/AdminSettings.tsx';
+import { AdminShell } from '../src/features/admin/shell/AdminShell.tsx';
+import { LegacyGhlCard } from '../src/features/admin/tabs/LegacyGhlCard.tsx';
+import { AdminMfaGate } from '../src/features/admin/shell/AdminMfaGate.tsx';
+import { SyncIndicator } from '../src/components/SyncIndicator.tsx';
+import { SyncProvider } from '../src/lib/sync.tsx';
+import { SetupStepCard } from '../src/components/SetupStepCard.tsx';
+import { SetupTab } from '../src/features/admin/tabs/SetupTab.tsx';
+import { BusinessTab } from '../src/features/admin/tabs/BusinessTab.tsx';
+import { TwilioTab } from '../src/features/admin/tabs/TwilioTab.tsx';
+import { INFO_PRESETS } from '../src/domain/setup.ts';
+import { RegistrationFormView } from '../src/features/registration/RegistrationFormView.tsx';
+import { RegistrationCard } from '../src/features/admin/tabs/RegistrationCard.tsx';
+import { IntegrationsPage } from '../src/integrations/IntegrationsPage.tsx';
+import { IntegrationsProvider } from '../src/integrations/IntegrationsContext.tsx';
+import { NotPluggedIn } from '../src/integrations/NotPluggedIn.tsx';
+import { GuideView } from '../src/integrations/GuideView.tsx';
+import { integrationInfo } from '../src/integrations/catalog.ts';
+import { EMPTY_REGISTRATION, validateRegistration } from '../src/domain/registration.ts';
+import type { IntegrationStatusMap, RegistrationSaved } from '../src/domain/index.ts';
+
+/** presets are looked up by name, so adding a new one never breaks a test that wanted another */
+const PRESET = (id: string) => INFO_PRESETS.find((p) => p.id === id)!;
+import type {
+  ActivityResult,
+  Billing,
+  Cal,
+  ClientStep,
+  Controls,
+  Health,
+  SetupOverview,
+  Twilio,
+} from '../src/domain/index.ts';
 
 const stats = { responseSpeed: '1m 02s', callsRescued: '4', pipelineValue: '$9,500', bookingRate: '50%', bookingDetail: '2 of 4 missed calls booked.' };
 
@@ -180,21 +203,38 @@ const calendar: Cal = {
 };
 
 describe('admin: calendar', () => {
-  test('not connected: sync cannot be requested, and the explanation is honest', () => {
+  test('not connected: there is a real Connect button, and Outlook is honestly marked as not ready', () => {
     const html = renderToStaticMarkup(<CalendarTab accountId="a" onDenied={() => {}} initial={calendar} />);
     assert.match(html, />Calendar connection</);
     assert.match(html, />Not connected</);
-    assert.match(html, /<button[^>]*disabled=""[^>]*>Request sync/);
-    assert.match(html, /next piece to build/);
+    assert.match(html, />Connect Google Calendar</);
+    assert.match(html, /<button[^>]*disabled=""[^>]*>Outlook: coming next/);
+    assert.match(html, /Nothing is connected/);
+    assert.match(html, /connect it themselves from their Setup page/);
+    assert.doesNotMatch(html, />Sync now</);
+    assert.doesNotMatch(html, /Save connection|Request sync/, 'the old pretend form is gone');
     assert.match(html, /Upcoming inspections/);
   });
-  test('connected: shows the label and allows a sync request', () => {
-    const connected: Cal = { ...calendar, provider: 'google', status: 'active', calendar_label: 'Crew calendar', external_calendar_id: 'mike@summit.example', busy_blocks: 12, last_synced_at: new Date().toISOString() };
+
+  test('connected: shows who it is connected as, and lets you sync, reconnect or disconnect', () => {
+    const connected: Cal = { ...calendar, provider: 'google', status: 'active', calendar_label: 'mike@summit.example', busy_blocks: 12, last_synced_at: new Date().toISOString() };
     const html = renderToStaticMarkup(<CalendarTab accountId="a" onDenied={() => {}} initial={connected} />);
     assert.match(html, />Connected</);
-    assert.match(html, /value="Crew calendar"/);
-    assert.doesNotMatch(html, /<button[^>]*disabled=""[^>]*>Request sync/);
+    assert.match(html, /mike@summit\.example/);
+    for (const label of ['Sync now', 'Reconnect', 'Disconnect']) assert.match(html, new RegExp(`>${label}<`));
+    assert.doesNotMatch(html, />Connect Google Calendar</);
     assert.match(html, /just now/);
+    assert.match(html, />12</, 'the busy times being avoided');
+  });
+
+  test('a connection that stopped working says so and offers Reconnect, with the reason', () => {
+    const broken: Cal = { ...calendar, provider: 'google', status: 'needs_reauth', calendar_label: 'mike@summit.example', last_error: 'invalid_grant' };
+    const html = renderToStaticMarkup(<CalendarTab accountId="a" onDenied={() => {}} initial={broken} />);
+    assert.match(html, />Needs to reconnect</);
+    assert.match(html, /stopped working/);
+    assert.match(html, /invalid_grant/);
+    assert.match(html, />Reconnect</);
+    assert.doesNotMatch(html, />Sync now</, 'syncing a broken connection would only fail');
   });
 });
 
@@ -426,9 +466,444 @@ describe('admin: the legacy GoHighLevel card and the updated indicator', () => {
     assert.match(set, /value="ghlLoc_123"/);
   });
 
-  test('"updated" shows when the screen last refreshed', () => {
-    assert.match(renderToStaticMarkup(<Updated at={null} />), /Loading…/);
-    assert.match(renderToStaticMarkup(<Updated at={Date.now()} onRefresh={() => {}} />), /Updated just now/);
-    assert.match(renderToStaticMarkup(<Updated at={Date.now()} onRefresh={() => {}} />), />Refresh</);
+  test('there is ONE sync button, in the header, and no screen has its own refresh', () => {
+    const html = renderToStaticMarkup(<SyncProvider><SyncIndicator /></SyncProvider>);
+    assert.match(html, /aria-label="Sync everything now"/);
+    assert.match(html, /Syncing/);
+    assert.equal(renderToStaticMarkup(<SyncIndicator />), '', 'outside the admin there is nothing to show');
+    const shell = renderToStaticMarkup(<AdminShell section="clients" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
+    assert.equal((shell.match(/aria-label="Sync everything now"/g) ?? []).length, 1);
+    for (const tab of [
+      <HealthTab key="h" accountId="a" onDenied={() => {}} initial={{ health: calm, ctx: liveCtx }} />,
+      <ActivityTab key="a" accountId="a" onDenied={() => {}} initial={activity} />,
+      <BillingTab key="b" accountId="a" onDenied={() => {}} initial={billing} />,
+      <CalendarTab key="c" accountId="a" onDenied={() => {}} initial={calendar} />,
+    ]) {
+      const out = renderToStaticMarkup(tab);
+      assert.doesNotMatch(out, />Refresh</);
+      assert.doesNotMatch(out, /Updated (just now|\d)/);
+    }
+  });
+
+});
+
+
+// ---------------------------------------------------------------- setup: what we ask, what they send
+const clientStep = (over: Partial<ClientStep> = {}): ClientStep => ({
+  id: 's1', step_key: 'business_details', title: 'Business details', description: 'We register your number with the carriers.', status: 'waiting_on_you', note: 'Needed before we can submit.',
+  sort_order: 1, completed_at: null, info_prompt: 'We need a few details about your business.', info_fields: PRESET('business').fields.slice(0, 3),
+  info_response: null, info_submitted_at: null, action: null, ...over,
+});
+
+describe('client: a setup step that asks for information', () => {
+  test('shows what we need, an easy form, and says it is optional', () => {
+    const html = renderToStaticMarkup(<SetupStepCard step={clientStep()} tz="America/Chicago" onSubmit={async () => null} />);
+    assert.match(html, />Business details</);
+    assert.match(html, />Waiting on you</);
+    assert.match(html, />What we need</);
+    assert.match(html, /We need a few details about your business\./);
+    assert.match(html, /Legal business name/);
+    assert.match(html, /Website<span[^>]*> \(optional\)/, 'optional questions are marked');
+    assert.doesNotMatch(html, /Legal business name<span/, 'required ones are not');
+    assert.match(html, />Send to WedgeScale</);
+    assert.match(html, /This is optional\. If it is easier, just reply to our email/);
+    assert.match(html, /Needed before we can submit\./);
+  });
+
+  test('after they send it: a thank-you state with their answers, and a way to change them', () => {
+    const html = renderToStaticMarkup(
+      <SetupStepCard
+        defaultOpen
+        step={clientStep({ status: 'in_progress', info_submitted_at: new Date().toISOString(), info_response: { legal_name: 'Summit Roofing LLC', website: 'https://summit.example' } })}
+        tz="America/Chicago"
+      />
+    );
+    assert.match(html, />Info sent</);
+    assert.match(html, /Summit Roofing LLC/);
+    assert.match(html, />Change my answers</);
+    assert.doesNotMatch(html, />Send to WedgeScale</);
+    assert.doesNotMatch(html, /<input/);
+  });
+
+  test('every kind of question gets the right kind of box', () => {
+    const fields = [
+      { key: 'a', label: 'Phone', type: 'phone' as const }, { key: 'b', label: 'Email', type: 'email' as const }, { key: 'c', label: 'Site', type: 'url' as const },
+      { key: 'd', label: 'Story', type: 'textarea' as const }, { key: 'e', label: 'Carrier', type: 'select' as const, options: ['AT&T', 'Verizon'] },
+    ];
+    const html = renderToStaticMarkup(<SetupStepCard step={clientStep({ info_fields: fields })} tz="America/Chicago" />);
+    assert.match(html, /type="tel"/);
+    assert.match(html, /type="email"/);
+    assert.match(html, /type="url"/);
+    assert.match(html, /<textarea/);
+    assert.match(html, /<option value=""[^>]*>Choose one<\/option><option value="AT&amp;T">AT&amp;T<\/option>/);
+  });
+
+  test('the calendar step offers Connect, shows who is connected, and asks to reconnect when broken', () => {
+    const base = clientStep({ title: 'Connect your calendar', info_fields: [], info_prompt: 'Connect your calendar so we never double-book you.', action: 'connect_calendar' });
+    const none = renderToStaticMarkup(<SetupStepCard step={base} tz="America/Chicago" calendar={null} onConnectCalendar={async () => null} />);
+    assert.match(none, />Connect Google Calendar</);
+    assert.match(none, /disconnect any time/);
+    const ok = renderToStaticMarkup(<SetupStepCard step={base} tz="America/Chicago" calendar={{ status: 'active', label: 'mike@summit.example' }} />);
+    assert.match(ok, />Connected</);
+    assert.match(ok, /mike@summit\.example/);
+    assert.doesNotMatch(ok, />Connect Google Calendar</);
+    const bad = renderToStaticMarkup(<SetupStepCard step={base} tz="America/Chicago" calendar={{ status: 'needs_reauth', label: null }} onConnectCalendar={async () => null} />);
+    assert.match(bad, />Reconnect Google Calendar</);
+    assert.match(bad, /stopped working/);
+  });
+
+  test('a finished step is just a tick, and a plain step has nothing to open', () => {
+    const done = renderToStaticMarkup(<SetupStepCard step={clientStep({ status: 'done', completed_at: '2026-10-12T15:00:00Z' })} tz="America/Chicago" />);
+    assert.match(done, />Done · Oct 12</);
+    assert.doesNotMatch(done, />What we need</);
+    const plain = renderToStaticMarkup(<SetupStepCard step={clientStep({ description: null, note: null, info_fields: [], info_prompt: null, status: 'pending' })} tz="America/Chicago" />);
+    assert.doesNotMatch(plain, /aria-expanded/);
+    assert.match(plain, />Up next</);
+  });
+});
+
+const overview: SetupOverview = {
+  owner: { email: 'mike@summit.example', name: 'Mike Brooks' },
+  steps: [
+    { id: 's0', step_key: 'kickoff', title: 'Kickoff call', description: null, status: 'done', note: null, sort_order: 0, completed_at: '2026-10-01T12:00:00Z', info_prompt: null, info_fields: [], info_response: null, info_submitted_at: null, action: null, emails_sent: 0, last_email_at: null },
+    { id: 's1', step_key: 'business_details', title: 'Business details', description: null, status: 'waiting_on_you', note: 'Needed for registration', sort_order: 1, completed_at: null,
+      info_prompt: 'We need a few details.', info_fields: PRESET('business').fields.slice(0, 2), info_response: { legal_name: 'Summit Roofing LLC', website: 'https://summit.example' },
+      info_submitted_at: new Date(Date.now() - 3600000).toISOString(), action: null, emails_sent: 2, last_email_at: new Date(Date.now() - 86400000).toISOString() },
+    { id: 's2', step_key: 'calendar', title: 'Connect calendar', description: null, status: 'pending', note: null, sort_order: 2, completed_at: null, info_prompt: null, info_fields: [], info_response: null, info_submitted_at: null, action: null, emails_sent: 0, last_email_at: null },
+  ],
+  emails: [{ id: 'e1', step_key: 'business_details', to_email: 'mike@summit.example', subject: 'Quick question about Business details', status: 'sent', error: null, created_at: new Date(Date.now() - 86400000).toISOString() }],
+};
+
+describe('admin: setup tab', () => {
+  test('summarises progress, and flags steps where the client has sent something', () => {
+    const html = renderToStaticMarkup(<SetupTab accountId="a" onSaveStep={async () => null} onDenied={() => {}} initial={overview} />);
+    assert.match(html, /1 of 3 steps done, 1 with info from the client waiting for you/);
+    assert.match(html, />Info received</);
+    assert.match(html, /Emailed 2×/);
+    assert.match(html, />Up next</);
+    assert.match(html, />Done</);
+  });
+
+  test('the first unfinished step is open, with what they sent and a way to copy it into business info', () => {
+    const html = renderToStaticMarkup(<SetupTab accountId="a" onSaveStep={async () => null} onDenied={() => {}} initial={overview} />);
+    assert.match(html, />What the client sent</);
+    assert.match(html, /Summit Roofing LLC/);
+    assert.match(html, />Copy into business info</);
+    assert.match(html, />Save step</);
+    assert.match(html, /Waiting on client/);
+    assert.equal((html.match(/aria-expanded="true"/g) ?? []).length, 1, 'only one step is open at a time');
+  });
+
+  test('each step has both tools: what we ask for, and the email', () => {
+    const html = renderToStaticMarkup(<SetupTab accountId="a" onSaveStep={async () => null} onDenied={() => {}} initial={overview} />);
+    assert.match(html, />What we ask for</);
+    assert.match(html, />Email the client</);
+    assert.match(html, /It is always optional: they can also just reply to your email/);
+    assert.match(html, />Pick a preset…|Replace with a preset…/);
+    assert.match(html, /A button on the client(&#x27;|')s step/);
+    assert.match(html, />Open our business registration form</);
+    assert.match(html, />Connect Google Calendar</);
+    assert.match(html, /Or a link of your own/);
+    assert.match(html, /Must start with https:\/\//);
+    assert.match(html, />Add a question</);
+    assert.match(html, />Stop asking</);
+  });
+
+  test('a client with no steps, and the loading state', () => {
+    assert.match(renderToStaticMarkup(<SetupTab accountId="a" onSaveStep={async () => null} onDenied={() => {}} initial={{ ...overview, steps: [] }} />), /no setup steps/);
+    assert.match(renderToStaticMarkup(<SetupTab accountId="a" onSaveStep={async () => null} onDenied={() => {}} />), /Loading setup/);
+  });
+});
+
+describe('admin: business and Twilio tabs', () => {
+  test('business details: what carriers need, who to contact, private notes', () => {
+    const html = renderToStaticMarkup(<BusinessTab accountId="a" onDenied={() => {}} initial={{ legal_name: 'Summit Roofing LLC', city: 'Dallas', contact_email: 'mike@summit.example' }} />);
+    for (const t of ['The business', 'Who to contact', 'Notes']) assert.match(html, new RegExp(`>${t}<`));
+    assert.match(html, /value="Summit Roofing LLC"/);
+    assert.match(html, /value="Dallas"/);
+    assert.match(html, /Private to the admin team/);
+    assert.match(html, />Save business info</);
+    assert.match(renderToStaticMarkup(<BusinessTab accountId="a" onDenied={() => {}} />), /Loading business details/);
+  });
+
+  const twilio: Twilio = {
+    twilio_subaccount_sid: 'AC' + 'a'.repeat(32), messaging_service_sid: null, phone_number: '+12145550100', phone_number_sid: null, brand_sid: null, campaign_sid: null,
+    forwarding_status: 'pending', has_token: false, registration_status: 'pending', account_status: 'setup', notification_phone: null,
+  };
+  test('Twilio: a checklist of what is missing, the ids, and a token box that never shows the token', () => {
+    const html = renderToStaticMarkup(<TwilioTab accountId="a" onDenied={() => {}} initial={twilio} />);
+    assert.match(html, />Where this client stands</);
+    assert.ok((html.match(/>Missing</g) ?? []).length >= 4, 'subaccount set, but no token, approval, forwarding or live account');
+    assert.match(html, /value="\+12145550100"/);
+    assert.match(html, /Waiting for the carriers/);
+    assert.match(html, /type="password"/);
+    assert.match(html, />Paste the token</);
+    assert.match(html, /never shown again/);
+    assert.match(html, /Doing it automatically is the next thing to build/);
+  });
+  test('Twilio: once a token is saved it only says so', () => {
+    const html = renderToStaticMarkup(<TwilioTab accountId="a" onDenied={() => {}} initial={{ ...twilio, has_token: true }} />);
+    assert.match(html, />Replace the token</);
+    assert.doesNotMatch(html, />Paste the token</);
+  });
+});
+
+
+// ---------------------------------------------------------------- the registration form
+describe('registration: the form the client fills in', () => {
+  const noop = () => {};
+  const base = { value: EMPTY_REGISTRATION, errors: {}, onChange: noop, onSubmit: noop, busy: false };
+
+  test('asks in plain sections, and explains how the EIN is treated', () => {
+    const html = renderToStaticMarkup(<RegistrationFormView {...base} />);
+    for (const t of ['Your business', 'Business address', 'Who we should list as the contact']) assert.match(html, new RegExp(`>${t}<`));
+    assert.match(html, /Legal business name/);
+    assert.match(html, /exactly as it appears on your IRS EIN letter/i);
+    assert.match(html, /EIN \(employer identification number\)/);
+    assert.match(html, /How we handle your EIN/);
+    assert.match(html, /encrypted the moment you send it/);
+    assert.match(html, /I am the owner, or I am allowed to register this business/);
+    assert.match(html, />Send registration details</);
+    assert.match(html, /My business does not have an EIN/);
+  });
+
+  test('problems are shown beside the question, and counted at the bottom', () => {
+    const errors = validateRegistration(EMPTY_REGISTRATION);
+    const html = renderToStaticMarkup(<RegistrationFormView {...base} errors={errors} />);
+    assert.match(html, /role="alert"[^>]*>Choose the kind of business\./);
+    assert.match(html, /An EIN has 9 digits/);
+    assert.match(html, /aria-invalid="true"/);
+    assert.match(html, /Please fix the highlighted questions and send it again\./);
+  });
+
+  test('a sole proprietor with no EIN is not asked for one', () => {
+    const html = renderToStaticMarkup(<RegistrationFormView {...base} value={{ ...EMPTY_REGISTRATION, has_ein: false, business_type: 'sole_proprietor' }} />);
+    assert.doesNotMatch(html, /EIN \(employer identification number\)/);
+    assert.match(html, /checked=""/);
+  });
+
+  test('an EIN already saved is shown only as its last 4, and leaving it blank keeps it', () => {
+    const html = renderToStaticMarkup(<RegistrationFormView {...base} savedEinLast4="6789" />);
+    assert.match(html, /placeholder="Saved: ••-•••6789\. Leave blank to keep it\."/);
+    assert.doesNotMatch(html, /3456789/);
+  });
+
+  test('while sending, the button says so and cannot be pressed twice', () => {
+    const html = renderToStaticMarkup(<RegistrationFormView {...base} busy submitError="We could not send that." />);
+    assert.match(html, /<button[^>]*disabled=""[^>]*>Sending…/);
+    assert.match(html, /We could not send that\./);
+  });
+});
+
+describe('registration: what you see as the admin', () => {
+  const submitted: RegistrationSaved = {
+    status: 'submitted', path: 'standard', business_type: 'llc', legal_name: 'Summit Roofing LLC', has_ein: true, ein_last4: '6789',
+    address1: '1 Main St', city: 'Dallas', region: 'TX', postal_code: '75201', website: 'https://summit.example',
+    contact_name: 'Mike Brooks', contact_title: 'Owner', contact_email: 'mike@summit.example', contact_phone: '(214) 555-0100',
+    submitted_at: new Date(Date.now() - 3600000).toISOString(),
+  };
+
+  test('before they send it, it says what to do', () => {
+    const html = renderToStaticMarkup(<RegistrationCard accountId="a" onDenied={() => {}} initial={{ status: 'not_started' }} />);
+    assert.match(html, />Business registration</);
+    assert.match(html, />Not started</);
+    assert.match(html, /has not sent it yet/);
+    assert.match(html, /Send them to our registration form/);
+    assert.doesNotMatch(html, />Reveal EIN</);
+  });
+
+  test('once sent: the details, the EIN masked, and the path that will be filed', () => {
+    const html = renderToStaticMarkup(<RegistrationCard accountId="a" onDenied={() => {}} initial={submitted} />);
+    assert.match(html, />Received</);
+    assert.match(html, /Standard business \(has an EIN\)/);
+    assert.match(html, /Summit Roofing LLC/);
+    assert.match(html, /••-•••6789/);
+    assert.doesNotMatch(html, /12-3456789|123456789/, 'the full EIN is never in the page until you ask');
+    assert.match(html, />Reveal EIN</);
+    assert.match(html, />Mark ready to file</);
+    assert.match(html, />Send back to the client</);
+  });
+
+  test('a business with no EIN shows the sole-proprietor path and nothing to reveal', () => {
+    const html = renderToStaticMarkup(<RegistrationCard accountId="a" onDenied={() => {}} initial={{ ...submitted, has_ein: false, ein_last4: null, path: 'sole_proprietor' }} />);
+    assert.match(html, /Sole proprietor \(no EIN\)/);
+    assert.match(html, /None \(sole proprietor\)/);
+    assert.doesNotMatch(html, />Reveal EIN</);
+  });
+
+  test('once ready it is locked, and the next step is filing', () => {
+    const html = renderToStaticMarkup(<RegistrationCard accountId="a" onDenied={() => {}} initial={{ ...submitted, status: 'ready' }} />);
+    assert.match(html, />Ready to file</);
+    assert.match(html, />Mark filed with the carriers</);
+    assert.doesNotMatch(html, />Mark ready to file</);
+    assert.match(html, /The client can no longer change this/);
+  });
+
+  test('sent back: the reason is shown', () => {
+    const html = renderToStaticMarkup(<RegistrationCard accountId="a" onDenied={() => {}} initial={{ ...submitted, status: 'needs_changes', admin_notes: 'Name must match the IRS letter.' }} />);
+    assert.match(html, />Needs changes</);
+    assert.match(html, /Sent back with: Name must match the IRS letter\./);
+  });
+});
+
+describe('the client\'s setup step: registration and links', () => {
+  const step = (over = {}) => ({
+    id: 's9', step_key: 'registration', title: 'Business registration', description: null, status: 'waiting_on_you' as const, note: null, sort_order: 3,
+    completed_at: null, info_prompt: 'We need your business details.', info_fields: [], info_response: null, info_submitted_at: null, action: 'registration_form', ...over,
+  });
+
+  test('a button opens the form, and it says how long it takes', () => {
+    const html = renderToStaticMarkup(<SetupStepCard step={step()} tz="America/Chicago" onOpenRegistration={() => {}} />);
+    assert.match(html, />Open the registration form</);
+    assert.match(html, /Takes about 5 minutes\. Your EIN is stored encrypted\./);
+  });
+
+  test('after sending, the step shows where it stands and offers a review', () => {
+    const html = renderToStaticMarkup(
+      <SetupStepCard step={step({ status: 'in_progress', info_submitted_at: new Date().toISOString() })} defaultOpen tz="America/Chicago" registration={{ status: 'submitted', submitted_at: new Date().toISOString() }} onOpenRegistration={() => {}} />
+    );
+    assert.match(html, />Received</);
+    assert.match(html, /We have it and will review it shortly/);
+    assert.match(html, />Review or update your details</);
+    assert.match(html, />Info sent</);
+  });
+
+  test('a link added by the admin opens in a new tab, safely, with its own button text', () => {
+    const html = renderToStaticMarkup(
+      <SetupStepCard step={step({ action: null, info_link: 'https://forms.example.com/ins', info_link_label: 'Open the insurance form' })} tz="America/Chicago" />
+    );
+    assert.match(html, /href="https:\/\/forms\.example\.com\/ins"/);
+    assert.match(html, /target="_blank"/);
+    assert.match(html, /rel="noopener noreferrer"/);
+    assert.match(html, />Open the insurance form</);
+    const plain = renderToStaticMarkup(<SetupStepCard step={step({ action: null, info_link: 'https://forms.example.com/ins' })} tz="America/Chicago" />);
+    assert.match(plain, />Open the form</);
+  });
+});
+
+// ---------------------------------------------------------------- integrations
+const ST = (state: 'ready' | 'not_configured' | 'manual' | 'undecided', missing: string[] = [], warnings: string[] = []) => ({ state, missing, warnings });
+const statuses = (over: Partial<IntegrationStatusMap> = {}): IntegrationStatusMap => ({
+  stripe: ST('ready'), google_calendar: ST('ready'), email: ST('ready'), twilio: ST('manual'), call_forwarding: ST('undecided'), ...over,
+});
+const ctx = { backendUrl: 'https://abcd1234.supabase.co', appUrl: 'https://dashboard.wedgescale.com' };
+
+describe('integrations: the page', () => {
+  test('lists every service with where it stands, and what is missing', () => {
+    const html = renderToStaticMarkup(
+      <IntegrationsProvider initial={statuses({ stripe: ST('not_configured', ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']), google_calendar: ST('ready', [], ['CRON_SECRET']) })}>
+        <IntegrationsPage />
+      </IntegrationsProvider>
+    );
+    for (const name of ['Stripe', 'Google Calendar', 'Email sending', 'Twilio', 'Call forwarding']) assert.match(html, new RegExp(`>${name}<`));
+    assert.match(html, />Not plugged in</);
+    assert.match(html, />Plugged in</);
+    assert.match(html, />Done by hand</);
+    assert.match(html, />To decide</);
+    assert.match(html, /Missing: <span[^>]*>STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET</);
+    assert.match(html, /Recommended: <span[^>]*>CRON_SECRET</);
+    assert.match(html, /Nothing here is needed for the rest of the app to work/);
+  });
+
+  test('also lists what you are waiting for, grouped, with how long and what to do meanwhile', () => {
+    const html = renderToStaticMarkup(<IntegrationsProvider initial={statuses()}><IntegrationsPage /></IntegrationsProvider>);
+    assert.match(html, />What you are waiting for</);
+    for (const g of ['Do now', 'Waiting on someone else', 'To decide', 'Still to build']) assert.match(html, new RegExp(g));
+    assert.match(html, /Twilio and the carriers approve a client/);
+    assert.match(html, /Google reviews the app for calendar access/);
+    assert.match(html, /Meanwhile/);
+  });
+
+  test('if the status check cannot run, it says so instead of showing everything as off', () => {
+    const noProvider = renderToStaticMarkup(<IntegrationsPage />);
+    assert.match(noProvider, />Not checked</);
+    assert.doesNotMatch(noProvider, />Not plugged in</);
+  });
+});
+
+describe('integrations: a service that is not plugged in says so, instead of failing', () => {
+  const off = (id: 'stripe' | 'google_calendar' | 'email') => statuses({ [id]: ST('not_configured', ['SOMETHING']) } as Partial<IntegrationStatusMap>);
+
+  test('the message card', () => {
+    const html = renderToStaticMarkup(<IntegrationsProvider initial={off('stripe')}><NotPluggedIn id="stripe" /></IntegrationsProvider>);
+    assert.match(html, />Stripe is not plugged in yet</);
+    assert.match(html, /What it turns on/);
+    assert.match(html, /Everything else works/);
+    assert.match(html, /Missing: <span[^>]*>SOMETHING</);
+    assert.match(html, />Open the set-up guide</);
+  });
+
+  test('Billing: no Stripe sections, but the guarantee and notes remain', () => {
+    const billing = { exists: true, linked: false, plan: 'Not linked', monthly_price_cents: 0, status: 'trial', go_live_at: null, guarantee_override: null, notes: null,
+      stripe: { customer_id: null, subscription_id: null, status: null, price_label: null, current_period_end: null, cancel_at_period_end: false, payment_method: null, synced_at: null },
+      paid_cents: 0, open_cents: 0, invoices: [], guarantee: { status: 'not_started' } };
+    const html = renderToStaticMarkup(<IntegrationsProvider initial={off('stripe')}><BillingTab accountId="a" onDenied={() => {}} initial={billing as never} /></IntegrationsProvider>);
+    assert.match(html, />Stripe is not plugged in yet</);
+    assert.doesNotMatch(html, />Connect to Stripe</);
+    assert.doesNotMatch(html, />Link and sync</);
+    assert.match(html, />30-day guarantee</);
+    assert.match(html, />Notes</);
+    const on = renderToStaticMarkup(<IntegrationsProvider initial={statuses()}><BillingTab accountId="a" onDenied={() => {}} initial={billing as never} /></IntegrationsProvider>);
+    assert.match(on, />Connect to Stripe</);
+    assert.doesNotMatch(on, /not plugged in yet/);
+  });
+
+  test('Calendar: no Connect button when Google is not set up, and it appears once it is', () => {
+    const cal = { provider: 'none', status: 'not_connected', calendar_label: null, external_calendar_id: null, last_synced_at: null, last_error: null, sync_requested_at: null, busy_blocks: 0, pending_writes: 0, failed_writes: 0, synced_appointments: 0, upcoming_appointments: 0 };
+    const html = renderToStaticMarkup(<IntegrationsProvider initial={off('google_calendar')}><CalendarTab accountId="a" onDenied={() => {}} initial={cal} /></IntegrationsProvider>);
+    assert.match(html, />Google Calendar is not plugged in yet</);
+    assert.doesNotMatch(html, />Connect Google Calendar</);
+    const on = renderToStaticMarkup(<IntegrationsProvider initial={statuses()}><CalendarTab accountId="a" onDenied={() => {}} initial={cal} /></IntegrationsProvider>);
+    assert.match(on, />Connect Google Calendar</);
+  });
+
+  test('Setup: the calendar button option is marked while Google is not plugged in', () => {
+    const html = renderToStaticMarkup(<IntegrationsProvider initial={off('google_calendar')}><SetupTab accountId="a" onSaveStep={async () => null} onDenied={() => {}} initial={overview} /></IntegrationsProvider>);
+    assert.match(html, /Connect Google Calendar \(not plugged in yet\)/);
+    const on = renderToStaticMarkup(<IntegrationsProvider initial={statuses()}><SetupTab accountId="a" onSaveStep={async () => null} onDenied={() => {}} initial={overview} /></IntegrationsProvider>);
+    assert.doesNotMatch(on, /\(not plugged in yet\)/);
+  });
+
+  test('the admin menu has Integrations, in both the top bar and the phone bar', () => {
+    const html = renderToStaticMarkup(<AdminShell section="integrations" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
+    assert.equal((html.match(/>Integrations</g) ?? []).length, 2);
+    assert.match(html, /grid-cols-4/);
+  });
+});
+
+describe('integrations: a guide you can tick off', () => {
+  const guide = integrationInfo('stripe').guide(ctx);
+
+  test('numbered steps, copyable values with your real addresses, and how to know it works', () => {
+    const html = renderToStaticMarkup(<GuideView guide={guide} initialDone={[]} />);
+    assert.match(html, /0 of 8 steps ticked/);
+    assert.equal((html.match(/role="checkbox"/g) ?? []).length, 8);
+    assert.match(html, /https:\/\/abcd1234\.supabase\.co\/functions\/v1\/stripe-webhook/);
+    assert.ok((html.match(/>Copy</g) ?? []).length >= 5);
+    assert.match(html, /How to know it works/);
+    assert.match(html, /Send test webhook/);
+    assert.match(html, /Going live/);
+    assert.match(html, /rk_test_/);
+  });
+
+  test('ticked steps are marked and counted', () => {
+    const html = renderToStaticMarkup(<GuideView guide={guide} initialDone={[0, 2]} />);
+    assert.match(html, /2 of 8 steps ticked/);
+    assert.equal((html.match(/aria-checked="true"/g) ?? []).length, 2);
+  });
+
+  test('the Google guide says to publish the app and warns about verification', () => {
+    const html = renderToStaticMarkup(<GuideView guide={integrationInfo('google_calendar').guide(ctx)} initialDone={[]} />);
+    assert.match(html, /Publish the app/);
+    assert.match(html, /ends every connection after 7 days/);
+    assert.match(html, /Limited Use/);
+    assert.match(html, /calendar-callback/);
+  });
+
+  test('call forwarding is honestly a decision, with options, not instructions', () => {
+    const html = renderToStaticMarkup(<GuideView guide={integrationInfo('call_forwarding').guide(ctx)} initialDone={[]} />);
+    assert.match(html, /Option A/);
+    assert.match(html, /Option C/);
+    assert.match(html, /deliberately not made yet/);
   });
 });

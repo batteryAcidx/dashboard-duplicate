@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, Mail, Eye, EyeOff } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { authApi } from '../api';
 
 interface LoginPageProps {
   onNavigate?: (path: string) => void;
@@ -25,7 +25,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
       return;
     }
 
-    if (!isSupabaseConfigured) {
+    if (!authApi.isConfigured) {
       setErrorMessage('The dashboard is temporarily unavailable. Please try again shortly or contact support.');
       return;
     }
@@ -33,14 +33,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
-      });
+      const { user, error } = await authApi.signIn(email.trim(), password);
 
       if (error) {
-        const status = (error as { status?: number }).status;
-        const code = (error as { code?: string }).code;
+        const status = error.status;
+        const code = error.code;
         const msg = (error.message || '').toLowerCase();
 
         if (status === 429 || code === 'over_request_rate_limit' || msg.includes('rate limit')) {
@@ -57,9 +54,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSignIn }) =>
         return;
       }
 
-      if (data?.user) {
+      if (user) {
         setIsLoading(false);
-        const userEmail = data.user.email || email.trim();
+        const userEmail = user.email || email.trim();
         if (onSignIn) {
           onSignIn(userEmail);
         } else if (onNavigate) {

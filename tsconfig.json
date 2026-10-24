@@ -30,6 +30,7 @@
     "node_modules",
     "dist",
     "supabase",
-    "engine-tests"
+    "engine-tests",
+    "scripts"
   ]
 }

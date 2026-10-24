@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, ChevronDown, LogOut, RotateCcw } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { authApi, isConfigured, ownerApi } from '../api';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 import { formatBlock, zonedToUtc } from '../lib/tz';
 import { AppHeader } from '../components/AppHeader';
@@ -247,7 +247,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
   };
 
   const load = useCallback(async () => {
-    if (!isSupabaseConfigured) {
+    if (!isConfigured) {
       setLoadError('The dashboard is not connected to its database. Contact support.');
       setLoading(false);
       return;
@@ -255,8 +255,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     setLoading(true);
     setLoadError(null);
 
-    const { data: auth } = await supabase.auth.getUser();
-    const user = auth?.user;
+    const user = await authApi.currentUser();
     if (!user) {
       setLoadError('Please sign in again.');
       setLoading(false);
@@ -266,22 +265,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     setLoginEmail(user.email || userEmail);
 
     const [acc, prof, jv, cal, eng, blk] = await Promise.all([
-      supabase
-        .from('accounts')
-        .select(
-          'id, name, territory, timezone, service_area, services, office_open, office_close, works_weekends, notification_phone, quiet_start, quiet_end'
-        )
-        .maybeSingle(),
-      supabase.from('profiles').select('full_name, password_changed_at').eq('id', user.id).maybeSingle(),
-      supabase.from('job_values').select('job_type, typical_value'),
-      supabase.from('setup_steps').select('status').eq('step_key', 'calendar_connected').maybeSingle(),
-      supabase.from('account_engine_settings').select('book_existing_customers').maybeSingle(),
-      supabase
-        .from('availability_blocks')
-        .select('id, starts_at, ends_at, reason')
-        .gte('ends_at', new Date().toISOString())
-        .order('starts_at', { ascending: true })
-        .limit(50),
+      ownerApi.account.settings(),
+      ownerApi.settings.profile(user.id),
+      ownerApi.settings.jobValues(),
+      ownerApi.settings.calendarStep(),
+      ownerApi.settings.engine(),
+      ownerApi.settings.blocks(),
     ]);
 
     if (acc.error || !acc.data) {
@@ -349,7 +338,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
   /* ---------- saving ---------- */
 
   const updateAccount = async (values: Record<string, unknown>): Promise<string | null> => {
-    const { data, error } = await supabase.from('accounts').update(values).eq('id', accountId).select('id');
+    const { data, error } = await ownerApi.account.update(accountId, values);
     if (error) return 'Could not save. Check your connection and try again.';
     if (!data || data.length !== 1) return 'Could not save. Please sign in again and retry.';
     return null;
@@ -359,11 +348,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     runProfile(async () => {
       const name = fullName.trim();
       if (name.length > 80) return 'That name is too long.';
-      const { data, error } = await supabase
-        .from('profiles')
-        .update({ full_name: name || null })
-        .eq('id', userId)
-        .select('id');
+      const { data, error } = await ownerApi.settings.updateProfile(userId, name || null);
       if (error || !data || data.length !== 1) return 'Could not save. Try again.';
       setSnap((s) => (s ? { ...s, fullName: name } : s));
       return null;
@@ -428,7 +413,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
         rows.push({ account_id: accountId, job_type: j.key, typical_value: Math.round(n) });
       }
       if (rows.length === 0) return 'Enter at least one value.';
-      const { error } = await supabase.from('job_values').upsert(rows, { onConflict: 'account_id,job_type' });
+      const { error } = await ownerApi.settings.saveJobValues(rows);
       if (error) return 'Could not save. Check your connection and try again.';
 
       const merged = { ...jobInputs };
@@ -442,7 +427,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
 
   const saveBooking = () =>
     runBooking(async () => {
-      const { error } = await supabase.rpc('owner_set_book_existing', { p_value: bookExisting });
+      const { error } = await ownerApi.settings.setBookExisting(bookExisting);
       if (error) return 'Could not save. Check your connection and try again.';
       setSavedBookExisting(bookExisting);
       return null;
@@ -457,10 +442,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       const end = zonedToUtc(blockDate, blockEnd, tz || 'America/Chicago');
       if (!start || !end) return 'That date or time is not valid.';
       if (end.getTime() < Date.now()) return 'That time has already passed.';
-      const { data, error } = await supabase
-        .from('availability_blocks')
-        .insert({ account_id: accountId, starts_at: start.toISOString(), ends_at: end.toISOString(), reason: blockReason.trim() || null })
-        .select('id, starts_at, ends_at, reason');
+      const { data, error } = await ownerApi.settings.addBlock({ account_id: accountId, starts_at: start.toISOString(), ends_at: end.toISOString(), reason: blockReason.trim() || null });
       if (error || !data || data.length !== 1) return 'Could not save. Check your connection and try again.';
       setBlocks((prev) => [...prev, ...(data as BlockRow[])].sort((a, b) => a.starts_at.localeCompare(b.starts_at)));
       setBlockReason('');
@@ -468,7 +450,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     });
 
   const removeBlock = async (id: string) => {
-    const { error } = await supabase.from('availability_blocks').delete().eq('id', id);
+    const { error } = await ownerApi.settings.removeBlock(id);
     if (!error) setBlocks((prev) => prev.filter((b) => b.id !== id));
   };
 
@@ -479,7 +461,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       }
       if (newPassword !== confirmPassword) return 'Passwords do not match.';
 
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      const error = await authApi.updatePassword(newPassword);
       if (error) {
         const msg = (error.message || '').toLowerCase();
         const code = (error as { code?: string }).code;

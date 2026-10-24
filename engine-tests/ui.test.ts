@@ -7,10 +7,42 @@ import {
 import { formatPhone, parseContactCsv, toE164 } from '../src/lib/contacts.ts';
 import { formatBlock, zonedToUtc } from '../src/lib/tz.ts';
 import {
-  EMPTY_FILTERS, REFRESH_CHOICES, actionLabel, activityArgs, detectProblems, filtersActive, formatDuration, getRefreshSeconds, healthLevel, isStripeCustomerId,
-  pageInfo, percent, relativeTime, setRefreshSeconds, stripeCustomerUrl,
-  adminErrorText, centsToDollars, dollarsToCents, guaranteeView, hoursToText, parseHours, pauseLeft, pauseUntilIso, readiness,
-} from '../src/lib/adminTools.ts';
+  INFO_PRESETS, answersToRows, buildStepEmail, businessKeysIn, firstName, keyFromLabel, mailtoHref, mailtoTooLong, suggestPreset, validateFields,
+} from '../src/domain/setup.ts';
+
+/** presets are looked up by name, so adding a new one never breaks a test that wanted another */
+const PRESET = (id: string) => INFO_PRESETS.find((p) => p.id === id)!;
+import {
+  EMPTY_REGISTRATION, PATH_LABEL, REGISTRATION_STATUS, einDigits, errorCount, formFromSaved, formatEin, isHttpsLink, isPluggedIn, maskEin,
+  registrationErrorText, registrationLocked, registrationPath, registrationPayload, validateRegistration,
+} from '../src/domain/index.ts';
+import { getGuideProgress, setGuideProgress } from '../src/lib/preferences.ts';
+import { INTEGRATIONS, integrationInfo } from '../src/integrations/catalog.ts';
+import { KIND_LABEL, WAITING, waitingByKind } from '../src/integrations/waiting.ts';
+import {
+  EMPTY_FILTERS,
+  actionLabel,
+  activityArgs,
+  detectProblems,
+  filtersActive,
+  formatDuration,
+  healthLevel,
+  isStripeCustomerId,
+  pageInfo,
+  percent,
+  relativeTime,
+  stripeCustomerUrl,
+  adminErrorText,
+  centsToDollars,
+  dollarsToCents,
+  guaranteeView,
+  hoursToText,
+  parseHours,
+  pauseLeft,
+  pauseUntilIso,
+  readiness,
+} from '../src/domain/index.ts';
+import { REFRESH_CHOICES, getRefreshSeconds, setRefreshSeconds } from '../src/lib/preferences.ts';
 
 const future = new Date(Date.now() + 86400000).toISOString();
 const past = new Date(Date.now() - 86400000).toISOString();
@@ -437,5 +469,240 @@ describe('staying in sync, and Stripe links', () => {
     assert.equal(isStripeCustomerId('cus_12'), false);
     assert.equal(isStripeCustomerId(''), false);
     assert.equal(stripeCustomerUrl('cus_abc123456'), 'https://dashboard.stripe.com/customers/cus_abc123456');
+  });
+});
+
+
+describe('setup requests', () => {
+  test('presets are valid, ready to use, and cover the common asks', () => {
+    assert.deepEqual(INFO_PRESETS.map((p) => p.id), ['registration', 'business', 'owner', 'forwarding', 'calendar']);
+    for (const p of INFO_PRESETS) assert.equal(validateFields(p.fields), null, p.id);
+    assert.equal(INFO_PRESETS.find((p) => p.id === 'calendar')?.action, 'connect_calendar');
+    assert.equal(INFO_PRESETS.find((p) => p.id === 'registration')?.action, 'registration_form');
+    assert.ok(INFO_PRESETS.find((p) => p.id === 'business')!.fields.some((f) => f.key === 'legal_name' && f.required));
+  });
+
+  test('a preset is suggested from the step name', () => {
+    assert.equal(suggestPreset({ step_key: 'calendar_connected', title: 'Connect your calendar' }), 'calendar');
+    assert.equal(suggestPreset({ step_key: 'call_forwarding', title: 'Forward missed calls' }), 'forwarding');
+    assert.equal(suggestPreset({ step_key: 'brand_registration', title: 'Business registration' }), 'registration');
+    assert.equal(suggestPreset({ step_key: 'business_profile', title: 'Business details' }), 'business');
+    assert.equal(suggestPreset({ step_key: 'owner_phone', title: 'Who should we text?' }), 'owner');
+    assert.equal(suggestPreset({ step_key: 'kickoff', title: 'Kickoff call' }), null);
+  });
+
+  test('the same checks as the database', () => {
+    assert.equal(validateFields([]), null);
+    assert.match(validateFields([{ key: 'a', label: '', type: 'text' }]) ?? '', /label/);
+    assert.match(validateFields([{ key: 'a', label: 'A', type: 'text' }, { key: 'a', label: 'B', type: 'text' }]) ?? '', /called the same/);
+    assert.match(validateFields([{ key: 'Bad Key', label: 'X', type: 'text' }]) ?? '', /simpler name/);
+    assert.match(validateFields([{ key: 'c', label: 'Choice', type: 'select', options: [] }]) ?? '', /choices/);
+    assert.match(validateFields(Array.from({ length: 9 }, (_, i) => ({ key: `k${i}`, label: `K${i}`, type: 'text' as const }))) ?? '', /at most 8/);
+  });
+
+  test('a label becomes a safe key', () => {
+    assert.equal(keyFromLabel('Legal business name'), 'legal_business_name');
+    assert.equal(keyFromLabel('  Your phone # '), 'your_phone');
+    assert.equal(keyFromLabel('123 numbers'), 'f_123_numbers');
+    assert.equal(keyFromLabel('!!!'), '');
+    assert.ok(keyFromLabel('x'.repeat(80)).length <= 40);
+  });
+
+  test('answers are shown in the order asked, and only what was answered', () => {
+    const fields = PRESET('owner').fields;
+    assert.deepEqual(answersToRows(fields, { contact_phone: '(214) 555-0100', contact_name: 'Mike' }), [
+      { label: 'Your name', value: 'Mike' }, { label: 'Mobile number for booking alerts', value: '(214) 555-0100' },
+    ]);
+    assert.deepEqual(answersToRows(fields, null), []);
+    assert.deepEqual(businessKeysIn({ legal_name: 'X', crew: '4-10', city: 'Dallas' }), ['legal_name', 'city']);
+    assert.deepEqual(businessKeysIn(null), []);
+  });
+
+  test('the email draft is friendly, names what is needed, and says it is optional', () => {
+    const e = buildStepEmail({
+      ownerName: 'Mike Brooks', stepTitle: 'Business details', prompt: 'We need a few details for the registration.',
+      fields: PRESET('business').fields.slice(0, 2), link: 'https://dashboard.wedgescale.com/setup', signer: 'Vlad at WedgeScale',
+    });
+    assert.equal(e.subject, 'Quick question about Business details');
+    assert.match(e.body, /^Hi Mike,\n\nWe need a few details for the registration\./);
+    assert.match(e.body, /- Legal business name\n- Website \(optional\)/);
+    assert.match(e.body, /reply right here with it, or add it in your dashboard whenever suits you: https:\/\/dashboard\.wedgescale\.com\/setup/);
+    assert.match(e.body, /no rush/);
+    assert.match(e.body, /Vlad at WedgeScale$/);
+    const cal = buildStepEmail({ ownerEmail: 'mike.b@x.co', stepTitle: 'Calendar', fields: [], action: 'connect_calendar', link: 'L' });
+    assert.match(cal.body, /^Hi Mike,/);
+    assert.match(cal.body, /sign in with Google/);
+    assert.match(cal.body, /The WedgeScale team$/);
+  });
+
+  test('first names and the mail link', () => {
+    assert.equal(firstName('Mike Brooks'), 'Mike');
+    assert.equal(firstName(null, 'dana.ruiz@x.co'), 'Dana');
+    assert.equal(firstName('', ''), 'there');
+    const href = mailtoHref('mike@x.co', 'Hello there', 'Line one\nLine two & more');
+    assert.equal(href, 'mailto:mike@x.co?subject=Hello%20there&body=Line%20one%0ALine%20two%20%26%20more');
+    assert.equal(mailtoTooLong(href), false);
+    assert.equal(mailtoTooLong(mailtoHref('a@b.co', 's', 'x'.repeat(2000))), true);
+  });
+});
+
+
+const goodForm = () => ({
+  ...EMPTY_REGISTRATION, business_type: 'llc', legal_name: 'Summit Roofing LLC', ein: '12-3456789', address1: '1 Main St', city: 'Dallas', region: 'TX',
+  postal_code: '75201', contact_name: 'Mike Brooks', contact_email: 'mike@summit.example', contact_phone: '(214) 555-0100', authorized: true,
+});
+
+describe('the business registration form', () => {
+  test('an empty form lists everything that is missing, in plain words', () => {
+    const e = validateRegistration(EMPTY_REGISTRATION);
+    for (const k of ['business_type', 'legal_name', 'ein', 'address1', 'city', 'region', 'postal_code', 'contact_name', 'contact_email', 'contact_phone', 'authorized'] as const) {
+      assert.ok(e[k], `${k} should be reported`);
+    }
+    assert.equal(errorCount(e), 11);
+    assert.match(e.legal_name!, /IRS letter/);
+  });
+
+  test('a complete form has no errors', () => {
+    assert.deepEqual(validateRegistration(goodForm()), {});
+  });
+
+  test('the EIN: 9 digits, formatted as you type, and never required again once saved', () => {
+    assert.equal(einDigits('12-3456789 '), '123456789');
+    assert.equal(einDigits('1234567890123'), '123456789', 'extra digits are cut');
+    assert.equal(formatEin('1'), '1');
+    assert.equal(formatEin('12'), '12');
+    assert.equal(formatEin('123'), '12-3');
+    assert.equal(formatEin('123456789'), '12-3456789');
+    assert.ok(validateRegistration({ ...goodForm(), ein: '12-345' }).ein);
+    assert.equal(validateRegistration({ ...goodForm(), ein: '' }, { hasSavedEin: true }).ein, undefined, 'blank keeps the saved EIN');
+    assert.ok(validateRegistration({ ...goodForm(), ein: '' }, { hasSavedEin: false }).ein);
+    assert.equal(maskEin('6789'), '••-•••6789');
+    assert.equal(maskEin(null), 'Not given');
+  });
+
+  test('no EIN is allowed only for a sole proprietor, and that is the path used', () => {
+    assert.ok(validateRegistration({ ...goodForm(), has_ein: false, ein: '' }).has_ein, 'an LLC with no EIN is refused');
+    assert.deepEqual(validateRegistration({ ...goodForm(), business_type: 'sole_proprietor', has_ein: false, ein: '' }), {});
+    assert.equal(registrationPath(true), 'standard');
+    assert.equal(registrationPath(false), 'sole_proprietor');
+    assert.match(PATH_LABEL.standard, /has an EIN/);
+  });
+
+  test('email, phone, website and the authorisation tick are checked', () => {
+    assert.ok(validateRegistration({ ...goodForm(), contact_email: 'nope' }).contact_email);
+    assert.ok(validateRegistration({ ...goodForm(), contact_phone: '555' }).contact_phone);
+    assert.equal(validateRegistration({ ...goodForm(), contact_phone: '2145550100' }).contact_phone, undefined);
+    assert.ok(validateRegistration({ ...goodForm(), website: 'summit.example' }).website);
+    assert.equal(validateRegistration({ ...goodForm(), website: '' }).website, undefined, 'website is optional');
+    assert.ok(validateRegistration({ ...goodForm(), authorized: false }).authorized);
+  });
+
+  test('the EIN travels on its own, so it is never part of a stored form', () => {
+    const { data, ein } = registrationPayload(goodForm());
+    assert.equal(ein, '12-3456789');
+    assert.equal('ein' in data, false);
+    assert.doesNotMatch(JSON.stringify(data), /3456789/);
+    assert.equal(registrationPayload({ ...goodForm(), has_ein: false, business_type: 'sole_proprietor' }).ein, null);
+    assert.equal(registrationPayload({ ...goodForm(), ein: '' }).ein, null, 'blank means keep the saved one');
+  });
+
+  test('what we saved comes back into the form, without the EIN', () => {
+    assert.deepEqual(formFromSaved(null), EMPTY_REGISTRATION);
+    const f = formFromSaved({ business_type: 'llc', legal_name: 'X LLC', has_ein: true, ein_last4: '6789', country: 'CA', authorized: true });
+    assert.equal(f.legal_name, 'X LLC');
+    assert.equal(f.ein, '');
+    assert.equal(f.country, 'CA');
+    assert.equal(f.authorized, true);
+  });
+
+  test('once approved it is locked, and every status reads sensibly to the client', () => {
+    assert.equal(registrationLocked('submitted'), false);
+    assert.equal(registrationLocked('needs_changes'), false);
+    assert.equal(registrationLocked('ready'), true);
+    assert.equal(registrationLocked('sent_to_twilio'), true);
+    for (const k of ['draft', 'submitted', 'needs_changes', 'ready', 'sent_to_twilio']) assert.ok(REGISTRATION_STATUS[k].clientLine.length > 5, k);
+  });
+
+  test('database refusals become sentences', () => {
+    assert.match(registrationErrorText('locked'), /being filed/);
+    assert.match(registrationErrorText('bad_ein'), /9 digits/);
+    assert.match(registrationErrorText('ein_required'), /sole proprietor/);
+    assert.match(registrationErrorText('schema "vault" does not exist'), /securely/);
+    assert.match(registrationErrorText('boom'), /email us/);
+  });
+});
+
+describe('links, and the email that goes with a step', () => {
+  test('only secure links are accepted', () => {
+    assert.equal(isHttpsLink('https://forms.example.com/a'), true);
+    assert.equal(isHttpsLink('http://forms.example.com'), false);
+    assert.equal(isHttpsLink('javascript:alert(1)'), false);
+    assert.equal(isHttpsLink('https://has space.com'), false);
+    assert.equal(isHttpsLink('https://' + 'a'.repeat(600)), false);
+  });
+
+  test('the registration email never asks for the EIN by email', () => {
+    const e = buildStepEmail({ ownerName: 'Mike', stepTitle: 'Business registration', fields: [], action: 'registration_form', kind: 'secure_form', link: 'https://dashboard.wedgescale.com/registration' });
+    assert.match(e.body, /secure form rather than replying by email/);
+    assert.match(e.body, /last 4 digits/);
+    assert.match(e.body, /dashboard\.wedgescale\.com\/registration/);
+    assert.doesNotMatch(e.body, /reply right here/);
+  });
+
+  test('a link step says where to go, and still allows a reply', () => {
+    const e = buildStepEmail({ ownerName: 'Mike', stepTitle: 'Insurance', fields: [], kind: 'external', link: 'https://forms.example.com/ins' });
+    assert.match(e.body, /Here is the link: https:\/\/forms\.example\.com\/ins/);
+    assert.match(e.body, /reply to this email/);
+  });
+});
+
+describe('integrations: the catalog, the guides and the waiting list', () => {
+  const ctx = { backendUrl: 'https://abcd1234.supabase.co', appUrl: 'https://dashboard.wedgescale.com' };
+
+  test('a service is hidden only when the backend clearly says it is not set up', () => {
+    assert.equal(isPluggedIn(undefined), true, 'unknown never locks anyone out');
+    assert.equal(isPluggedIn({ state: 'unknown', missing: [] }), true);
+    assert.equal(isPluggedIn({ state: 'ready', missing: [] }), true);
+    assert.equal(isPluggedIn({ state: 'manual', missing: [] }), true);
+    assert.equal(isPluggedIn({ state: 'not_configured', missing: ['X'] }), false);
+  });
+
+  test('every service has a catalog entry and a complete guide', () => {
+    assert.deepEqual(INTEGRATIONS.map((i) => i.id).sort(), ['call_forwarding', 'email', 'google_calendar', 'stripe', 'twilio']);
+    for (const info of INTEGRATIONS) {
+      const g = info.guide(ctx);
+      assert.equal(g.id, info.id);
+      assert.ok(g.intro.length > 40 && g.time && g.cost, info.id);
+      assert.ok(g.steps.length >= 3, info.id);
+      assert.ok(g.checks.length >= 1, info.id);
+      for (const st of g.steps) assert.ok(st.title && st.body.length > 0, `${info.id}: ${st.title}`);
+      assert.ok(info.unlocks.length >= 1 && info.withoutIt.length > 10, info.id);
+    }
+    assert.throws(() => integrationInfo('nope' as never), /Unknown integration/);
+  });
+
+  test('the guides give the real addresses to paste', () => {
+    const copy = (id: string) => JSON.stringify(integrationInfo(id as never).guide(ctx));
+    assert.match(copy('stripe'), /https:\/\/abcd1234\.supabase\.co\/functions\/v1\/stripe-webhook/);
+    assert.match(copy('google_calendar'), /https:\/\/abcd1234\.supabase\.co\/functions\/v1\/calendar-callback/);
+    assert.match(copy('google_calendar'), /https:\/\/dashboard\.wedgescale\.com/);
+    assert.match(copy('google_calendar'), /calendar\.events/);
+  });
+
+  test('guide progress is remembered, cleaned up, and survives a blocked browser', () => {
+    let saved = '';
+    setGuideProgress('stripe', [3, 1, 1, 2], { setItem: (_k, v) => { saved = v; } });
+    assert.equal(saved, '[1,2,3]');
+    assert.deepEqual(getGuideProgress('stripe', { getItem: () => '[2,0,"x",-1]' }), [2, 0]);
+    assert.deepEqual(getGuideProgress('stripe', { getItem: () => 'not json' }), []);
+    assert.deepEqual(getGuideProgress('stripe', { getItem: () => { throw new Error('blocked'); } }), []);
+  });
+
+  test('the waiting list is complete: every kind has items, ids are unique, nothing is promised without a time', () => {
+    const ids = WAITING.map((w) => w.id);
+    assert.equal(new Set(ids).size, ids.length);
+    for (const k of Object.keys(KIND_LABEL) as (keyof typeof KIND_LABEL)[]) assert.ok(waitingByKind(k).length >= 1, k);
+    for (const w of WAITING) assert.ok(w.title && w.who && w.typical && w.blocks && w.meanwhile, w.id);
+    assert.ok(WAITING.some((w) => /Twilio/.test(w.title)) && WAITING.some((w) => /Google/.test(w.title)) && WAITING.some((w) => /Stripe/.test(w.title)));
   });
 });

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { isConfigured, ownerApi } from '../api';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 import { ContactTypeControl } from '../components/ContactTypeControl';
 import { AppHeader } from '../components/AppHeader';
@@ -133,7 +133,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
 
   const load = useCallback(
     async (silent = false) => {
-      if (!isSupabaseConfigured) {
+      if (!isConfigured) {
         setLoadError('The dashboard is not connected to its database. Contact support.');
         setLoading(false);
         return;
@@ -141,11 +141,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
       if (!silent) setLoading(true);
       setLoadError(null);
       const [acc, list] = await Promise.all([
-        supabase.from('accounts').select('name').maybeSingle(),
-        supabase
-          .from('contacts')
-          .select('phone_e164, contact_type, name, company, address, last_job, notes, auto_reply, source, needs_review, created_at')
-          .order('created_at', { ascending: false })
+        ownerApi.account.nameOnly(),
+        ownerApi.contacts.list()
           .limit(3000),
       ]);
       if (acc.data?.name) {
@@ -174,7 +171,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
   /* ---------- actions ---------- */
 
   const setContactType = async (row: ContactRow, type: ContactType): Promise<string | null> => {
-    const { error } = await supabase.rpc('owner_set_contact', { p_phone: row.phone_e164, p_type: type });
+    const { error } = await ownerApi.contacts.set({ p_phone: row.phone_e164, p_type: type });
     if (error) return 'Could not save. Check your connection and try again.';
     await load(true);
     return null;
@@ -185,7 +182,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
     const phone = toE164(addPhone);
     if (!phone) return setAddError('Enter a 10-digit US or Canadian number, for example (214) 555-0100.');
     setAddBusy(true);
-    const { error } = await supabase.rpc('owner_set_contact', {
+    const { error } = await ownerApi.contacts.set({
       p_phone: phone,
       p_type: addType,
       p_name: addName.trim() || null,
@@ -209,7 +206,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
     setImportError(null);
     if (parsed.rows.length === 0) return setImportError('Paste at least one row with a valid phone number.');
     setImportBusy(true);
-    const { data, error } = await supabase.rpc('owner_import_contacts', { p_rows: parsed.rows, p_type: importType });
+    const { data, error } = await ownerApi.contacts.import(parsed.rows, importType);
     setImportBusy(false);
     if (error) return setImportError('Could not import. Check your connection and try again.');
     const r = (data || {}) as { new?: number; updated?: number };
@@ -226,7 +223,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
       return;
     }
     setRemoving(null);
-    const { error } = await supabase.from('contacts').delete().eq('phone_e164', row.phone_e164);
+    const { error } = await ownerApi.contacts.remove(row.phone_e164);
     if (error) return flash('Could not remove that contact. Try again.');
     setRows((prev) => prev.filter((r) => r.phone_e164 !== row.phone_e164));
   };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Eye, EyeOff, AlertTriangle, CheckCircle2, Check, X, ArrowRight } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { authApi } from '../api';
 
 // Keep this in sync with Supabase: Authentication > Sign In / Providers > Email > Minimum password length
 const MIN_PASSWORD_LENGTH = 10;
@@ -35,21 +35,21 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
   const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (!authApi.isConfigured) {
       setHasValidSession(false);
       return;
     }
 
     let isMounted = true;
 
-    const applySession = (session: { user?: { last_sign_in_at?: string | null } } | null) => {
+    const applySession = (session: { user: { lastSignInAt: string | null } | null } | null) => {
       if (!session) return false;
       setHasValidSession(true);
       if (INITIAL_LINK_TYPE === 'invite') {
         setIsInvite(true);
       } else if (INITIAL_LINK_TYPE === 'recovery') {
         setIsInvite(false);
-      } else if (session.user && !session.user.last_sign_in_at) {
+      } else if (session.user && !session.user.lastSignInAt) {
         // fallback when the link type could not be read
         setIsInvite(true);
       }
@@ -57,7 +57,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
     };
 
     // Check existing session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    authApi.getSession().then(({ session, error }) => {
       if (!isMounted) return;
       if (error || !session) {
         // If there's a token in the address, give Supabase a moment to process it
@@ -76,7 +76,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
     });
 
     // React directly to Supabase Auth state events
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const stopListening = authApi.onChange((event, session) => {
       if (!isMounted) return;
 
       if (event === 'PASSWORD_RECOVERY') {
@@ -97,7 +97,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
     return () => {
       isMounted = false;
       clearTimeout(timeout);
-      subscription.unsubscribe();
+      stopListening();
     };
   }, []);
 
@@ -120,19 +120,19 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
 
     setIsLoading(true);
 
-    if (!isSupabaseConfigured) {
+    if (!authApi.isConfigured) {
       setIsLoading(false);
       setErrorMessage('The dashboard is not connected to its database. Contact support.');
       return;
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      const error = await authApi.updatePassword(password);
 
       if (error) {
         const msg = (error.message || '').toLowerCase();
-        const code = (error as { code?: string }).code;
-        const status = (error as { status?: number }).status;
+        const code = error.code;
+        const status = error.status;
 
         // The link/session is gone: show the expired screen
         if (

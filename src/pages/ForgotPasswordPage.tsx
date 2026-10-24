@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Mail, ArrowLeft, MailCheck } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { authApi } from '../api';
 
 interface ForgotPasswordPageProps {
   onNavigate?: (path: string) => void;
@@ -28,7 +28,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
 
     setErrorMessage(null);
 
-    if (!isSupabaseConfigured) {
+    if (!authApi.isConfigured) {
       setErrorMessage('The dashboard is temporarily unavailable. Please try again shortly or contact support.');
       return;
     }
@@ -36,13 +36,11 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(clean, {
-        redirectTo: `${window.location.origin}/set-password`,
-      });
+      const error = await authApi.sendPasswordReset(clean, `${window.location.origin}/set-password`);
 
       if (error) {
-        const status = (error as { status?: number }).status;
-        const code = (error as { code?: string }).code;
+        const status = error.status;
+        const code = error.code;
         const msg = (error.message || '').toLowerCase();
 
         // Problems that say nothing about whether the account exists: show them

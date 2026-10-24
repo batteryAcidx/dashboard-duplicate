@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { accessApi, isConfigured, ownerApi } from '../api';
 import { NotFoundPage } from './NotFoundPage';
 import { DashboardBody, DashboardLead, DashboardStats, WindowKey } from '../components/DashboardBody';
 import { LeadStatus } from '../components/LeadStatusControl';
@@ -156,11 +156,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
 
   /* account name and time zone (row-level security returns only the user's own account) */
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    supabase
-      .from('accounts')
-            .select('name, timezone, status')
-      .maybeSingle()
+    if (!isConfigured) return;
+    ownerApi.account.summary()
       .then(({ data }) => {
         if (data?.name) {
           setCompanyName(data.name);
@@ -172,10 +169,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    supabase
-      .from('job_values')
-      .select('job_type, typical_value')
+    if (!isConfigured) return;
+    ownerApi.settings.jobValues()
       .then(({ data }) => {
         const map: Record<string, number> = {};
         (data || []).forEach((r: { job_type: string; typical_value: number }) => {
@@ -187,13 +182,11 @@ export const QueuePage: React.FC<QueuePageProps> = ({
 
   // admins get a link to the admin page; an admin login with no client account goes straight there
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isConfigured) return;
     (async () => {
-      const { data: adminRow } = await supabase.from('admins').select('user_id').maybeSingle();
-      if (!adminRow) return;
+      if (!(await accessApi.isAdmin())) return;
       setIsAdmin(true);
-      const { data: profiles } = await supabase.from('profiles').select('id').limit(1);
-      if (!profiles || profiles.length === 0) {
+      if (!(await accessApi.hasClientAccount())) {
         if (onNavigate) onNavigate('/admin');
         else window.location.assign('/admin');
       }
@@ -204,8 +197,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
      A problem here never hides the leads themselves. */
   const loadExtras = useCallback(async () => {
     const [st, ct] = await Promise.all([
-      supabase.from('lead_state').select('lead_id, stage, collected, handoff_reason'),
-      supabase.from('contacts').select('phone_e164').eq('needs_review', true),
+      ownerApi.leads.states(),
+      ownerApi.leads.numbersToConfirm(),
     ]);
     if (!st.error) {
       const map: Record<string, LeadStateRow> = {};
@@ -219,15 +212,13 @@ export const QueuePage: React.FC<QueuePageProps> = ({
 
   /* leads list (light query: no message bodies) */
   const loadLeads = useCallback(async (silent = false) => {
-    if (!isSupabaseConfigured) {
+    if (!isConfigured) {
       setError('The dashboard is not connected to its database. Contact support.');
       setLoading(false);
       return;
     }
     if (!silent) setLoading(true);
-    const { data, error: err } = await supabase
-      .from('leads')
-      .select('*, appointments(starts_at, status), attachments(id), messages(sent_at)');
+    const { data, error: err } = await ownerApi.leads.list();
     if (err) {
       if (!silent) setError(err.message || 'Failed to load conversations.');
     } else {
@@ -242,9 +233,9 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   /* one thread */
     const loadThread = useCallback(async (leadId: string) => {
     const [m, a, ev] = await Promise.all([
-      supabase.from('messages').select('id, sender, body, sent_at').eq('lead_id', leadId).order('sent_at', { ascending: true }),
-      supabase.from('attachments').select('id, message_id, file_name, size_bytes').eq('lead_id', leadId),
-      supabase.from('lead_events').select('id, event_type, detail, actor, created_at').eq('lead_id', leadId).order('created_at', { ascending: true }),
+      ownerApi.leads.messages(leadId),
+      ownerApi.leads.attachments(leadId),
+      ownerApi.leads.events(leadId),
     ]);
     if (!m.error && !a.error) {
       setThreads((prev) => ({
@@ -296,7 +287,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   /* mark a lead read (one place only) */
   const markRead = useCallback(async (id: string) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, unread: false } : r)));
-    await supabase.from('leads').update({ unread: false }).eq('id', id);
+    await ownerApi.leads.markRead(id);
   }, []);
 
   /* a lead opened straight from the address bar should also be marked read */
@@ -338,11 +329,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       )
     );
 
-    const { error: err } = await supabase.rpc('change_lead_status', {
-      p_lead_id: id,
-      p_status: status,
-      p_final_value: nextValue,
-    });
+    const { error: err } = await ownerApi.leads.changeStatus(id, status, nextValue);
 
     if (err) {
       // put it back if it did not save
@@ -367,7 +354,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
 
   const handleChangeType = async (id: string, type: ContactType): Promise<string | null> => {
     if (!rows.some((r) => r.id === id)) return 'Lead not found.';
-    const { error: err } = await supabase.rpc('owner_set_lead_type', { p_lead_id: id, p_type: type });
+    const { error: err } = await ownerApi.leads.setType(id, type);
     if (err) return 'Could not save. Check your connection and try again.';
     // the status can change with the type (vendors are filed as not a lead), so reload everything
     await Promise.all([loadLeads(true), loadThread(id)]);
