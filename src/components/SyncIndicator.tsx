@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { useSync } from '../lib/sync';
 import { relativeTime } from '../domain/index';
 
-/** The one place that shows everything is in step, and the one Sync button. */
-export const SyncIndicator: React.FC = () => {
+/**
+ * The one place that shows everything is in step, and the one Sync button.
+ * compact: just an icon (it spins while syncing). The time is in its tooltip. Used where the bar is busy.
+ */
+export const SyncIndicator: React.FC<{ compact?: boolean }> = ({ compact }) => {
   const sync = useSync();
   const [, tick] = useState(0);
   useEffect(() => {
@@ -12,6 +16,21 @@ export const SyncIndicator: React.FC = () => {
   }, []);
   if (!sync) return null;
   const busy = sync.syncing;
+  const status = busy ? 'Syncing…' : sync.lastSyncAt ? `Synced ${relativeTime(sync.lastSyncAt)}` : 'Syncing…';
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={() => sync.syncAll()}
+        disabled={busy}
+        aria-label="Sync everything now"
+        title={`${status}. Press to sync now.`}
+        className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-200 disabled:cursor-default"
+      >
+        <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin text-[#ffc174]' : ''}`} aria-hidden="true" />
+      </button>
+    );
+  }
   return (
     <button
       type="button"

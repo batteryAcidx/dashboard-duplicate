@@ -17,10 +17,13 @@ import {
 } from '../src/domain/setup.ts';
 import { START_HERE, WIKI_TOPICS, isWikiTopic } from '../src/integrations/wiki.ts';
 import {
-  adminMenu, ownerMenu, parseTarget,
+  initialsOf, activeOwnerTab, adminMenu, ownerMenu, ownerTabs, parseTarget,
   EMPTY_REGISTRATION, PATH_LABEL, REGISTRATION_STATUS, einDigits, errorCount, formFromSaved, formatEin, isHttpsLink, isPluggedIn, maskEin,
   registrationErrorText, registrationLocked, registrationPath, registrationPayload, validateRegistration,
 } from '../src/domain/index.ts';
+import { applyLabelPlan, buildChart } from '../src/lib/chart.ts';
+import { activeUrgency, cleanUrgencyReason, recordedUrgency } from '../src/lib/leadView.ts';
+import type { ChartBucket } from '../src/lib/chart.ts';
 import { getGuideProgress, setGuideProgress } from '../src/lib/preferences.ts';
 import { INTEGRATIONS, integrationInfo } from '../src/integrations/catalog.ts';
 import {
@@ -811,24 +814,30 @@ describe('the Wiki content', () => {
 
 
 describe('the account menu never offers the page you are on', () => {
-  test('a client on each page sees the other two, and never their own', () => {
-    assert.deepEqual(ownerMenu('dashboard', false).map((i) => i.label), ['Contacts', 'Settings']);
-    assert.deepEqual(ownerMenu('contacts', false).map((i) => i.label), ['Dashboard', 'Settings']);
-    assert.deepEqual(ownerMenu('settings', false).map((i) => i.label), ['Dashboard', 'Contacts']);
+  test('a client has Dashboard, Contacts and Settings as tabs, in that order', () => {
+    assert.deepEqual(ownerTabs(false).map((t) => t.label), ['Dashboard', 'Contacts', 'Settings']);
+    assert.deepEqual(ownerTabs(false).map((t) => t.path), ['/queue', '/contacts', '/settings']);
   });
 
-  test('pages that are not in the menu (setup, registration) hide nothing', () => {
-    assert.deepEqual(ownerMenu('setup', false).map((i) => i.label), ['Dashboard', 'Contacts', 'Settings']);
-    assert.deepEqual(ownerMenu('registration', false).map((i) => i.label), ['Dashboard', 'Contacts', 'Settings']);
-    assert.deepEqual(ownerMenu(undefined, false).map((i) => i.label), ['Dashboard', 'Contacts', 'Settings']);
+  test('while the account is being set up, a Setup tab appears right after the Dashboard', () => {
+    assert.deepEqual(ownerTabs(true).map((t) => t.label), ['Dashboard', 'Setup', 'Contacts', 'Settings']);
+    assert.equal(ownerTabs(true)[1].path, '/setup');
   });
 
-  test('an admin who is also a client gets a way back to the admin, in gold', () => {
-    const items = ownerMenu('settings', true);
-    assert.deepEqual(items.map((i) => i.label), ['Dashboard', 'Contacts', 'Admin']);
-    assert.equal(items[2].path, '/admin');
-    assert.equal(items[2].accent, true);
-    assert.equal(ownerMenu('dashboard', false).some((i) => i.label === 'Admin'), false);
+  test('the page you are on is lit up, and the registration form lights up Setup', () => {
+    assert.equal(activeOwnerTab('contacts'), 'contacts');
+    assert.equal(activeOwnerTab('dashboard'), 'dashboard');
+    assert.equal(activeOwnerTab('setup'), 'setup');
+    assert.equal(activeOwnerTab('registration'), 'setup');
+    assert.equal(activeOwnerTab(undefined), undefined);
+  });
+
+  test('the client menu holds only what is not a page: a way back to the admin, for admins', () => {
+    assert.deepEqual(ownerMenu(false), []);
+    const items = ownerMenu(true);
+    assert.deepEqual(items.map((i) => i.label), ['Admin']);
+    assert.equal(items[0].path, '/admin');
+    assert.equal(items[0].accent, true);
   });
 
   test('the admin menu holds what the top bar does not, minus the page you are on', () => {
@@ -847,7 +856,7 @@ describe('the account menu never offers the page you are on', () => {
   });
 
   test('every item goes somewhere real', () => {
-    for (const i of [...adminMenu('clients'), ...ownerMenu(undefined, true)]) assert.match(i.path, /^\/[a-z/-]*$/, i.label);
+    for (const i of [...adminMenu('clients'), ...ownerMenu(true), ...ownerTabs(true)]) assert.match(i.path, /^\/[a-z/-]*$/, i.label);
   });
 
 });
@@ -868,5 +877,112 @@ describe('reading an address: the bug where "wiki#stripe" became a client', () =
     assert.equal(parseTarget('').path, '/');
     assert.equal(parseTarget('#only').path, '/');
     assert.equal(parseTarget('/a#').hash, '');
+  });
+});
+
+
+describe('initials for the contact avatar', () => {
+  test('two names give two letters, one gives one, a number gives #', () => {
+    assert.equal(initialsOf('Marcus Brooks'), 'MB');
+    assert.equal(initialsOf('  dana   ruiz  '), 'DR');
+    assert.equal(initialsOf('Mary Ann Smith'), 'MS', 'first and last');
+    assert.equal(initialsOf('Beacon'), 'B');
+    assert.equal(initialsOf('(214) 555-0101'), '#');
+    assert.equal(initialsOf(''), '#');
+    assert.equal(initialsOf(null), '#');
+    assert.equal(initialsOf('Beacon Supply Co.'), 'BC');
+  });
+});
+
+describe('the chart: date labels that never run off the edge', () => {
+  const make = (n: number, hourOf?: (i: number) => number): ChartBucket[] =>
+    Array.from({ length: n }, (_, i) => ({ key: `k${i}`, label: `L${i}`, title: `T${i}`, captured: 0, booked: 0, showLabel: false, align: 'center' as const, ...(hourOf ? { hour: hourOf(i) } : {}) }));
+  const shown = (b: ChartBucket[]) => b.map((x, i) => (x.showLabel ? i : -1)).filter((i) => i >= 0);
+
+  test('30 days: one label a week counting back from today, the last says "Today" and ends at the edge', () => {
+    const b = make(30);
+    applyLabelPlan(b, 'day', '30d');
+    assert.deepEqual(shown(b), [1, 8, 15, 22, 29]);
+    assert.equal(b[29].label, 'Today');
+    assert.equal(b[29].align, 'end');
+    assert.equal(b[1].align, 'start', 'near the left edge it leans right');
+    assert.deepEqual([8, 15, 22].map((i) => b[i].align), ['center', 'center', 'center']);
+  });
+
+  test('24 hours: every 6th hour, "Now" at the end, and nothing crowding it', () => {
+    const b = make(24, (i) => (i + 15) % 24);
+    applyLabelPlan(b, 'hour', '24h');
+    assert.deepEqual(shown(b), [3, 9, 15, 23]);
+    assert.equal(b[23].label, 'Now');
+    assert.equal(b[23].align, 'end');
+    const hours = b.filter((x) => x.showLabel).slice(0, 3).map((x) => x.hour);
+    assert.deepEqual(hours, [18, 0, 6]);
+    assert.equal(b[21].showLabel, false, 'the 12 PM label is dropped because "Now" is right next to it');
+  });
+
+  test('7 days: every weekday fits, so they are all shown, centered', () => {
+    const b = make(7);
+    applyLabelPlan(b, 'day', '7d');
+    assert.deepEqual(shown(b), [0, 1, 2, 3, 4, 5, 6]);
+    assert.ok(b.every((x) => x.align === 'center'));
+    assert.equal(b[6].label, 'L6', 'the real weekday stays');
+  });
+
+  test('whatever day it is, a real chart always ends with a label that fits, and no two labels crowd', () => {
+    for (const w of ['24h', '7d', '30d'] as const) {
+      const c = buildChart([], w, 'America/Chicago');
+      const idx = shown(c.buckets);
+      const last = c.buckets[c.buckets.length - 1];
+      assert.equal(last.showLabel, true, `${w}: the last bar is labelled`);
+      if (w !== '7d') assert.equal(last.align, 'end', `${w}: and leans in from the edge`);
+      assert.ok(idx.length >= 3, `${w}: enough labels to read`);
+      for (let i = 1; i < idx.length; i++) assert.ok(idx[i] - idx[i - 1] >= (w === '7d' ? 1 : 3), `${w}: labels ${idx[i - 1]} and ${idx[i]} are too close`);
+      const edge = c.buckets.length <= 7 ? 0 : Math.ceil(c.buckets.length * 0.08);
+      c.buckets.forEach((b, i) => {
+        if (b.showLabel && i < edge) assert.equal(b.align, 'start');
+        if (b.showLabel && i > c.buckets.length - 1 - edge) assert.equal(b.align, 'end');
+      });
+    }
+  });
+});
+
+
+describe('the priority a lead was given, versus whether it needs attention now', () => {
+  test('recorded priority is kept whatever the status', () => {
+    assert.equal(recordedUrgency({ urgency: 'emergency' }), 'emergency');
+    assert.equal(recordedUrgency({ urgency: 'urgent' }), 'urgent');
+    assert.equal(recordedUrgency({ urgency: 'normal' }), 'normal');
+    assert.equal(recordedUrgency({}), 'normal');
+    assert.equal(recordedUrgency({ urgency: 'nonsense' }), 'normal');
+  });
+
+  test('older leads that only have the yes/no flag count as high priority', () => {
+    assert.equal(recordedUrgency({ priority: true }), 'urgent');
+    assert.equal(recordedUrgency({ urgency: 'emergency', priority: true }), 'emergency', 'the flag never lowers a real level');
+    assert.equal(recordedUrgency({ priority: false }), 'normal');
+  });
+
+  test('a closed lead keeps its recorded priority even though it no longer needs attention', () => {
+    const won = { status: 'won', urgency: 'emergency', appointments: [] };
+    assert.equal(recordedUrgency(won), 'emergency');
+    assert.equal(activeUrgency(won), 'normal', 'sorting and alerts still end when the job closes');
+    const live = { status: 'following_up', urgency: 'emergency', appointments: [] };
+    assert.equal(activeUrgency(live), 'emergency');
+  });
+});
+
+
+describe('old notes that say nothing are never shown', () => {
+  test('the sentence an early script wrote onto old leads is dropped', () => {
+    assert.equal(cleanUrgencyReason('Flagged as priority before the engine'), undefined);
+    assert.equal(cleanUrgencyReason('  Flagged as priority before the engine  '), undefined);
+  });
+
+  test('a real reason is kept, trimmed, and an empty one is nothing', () => {
+    assert.equal(cleanUrgencyReason('Active leak right now'), 'Active leak right now');
+    assert.equal(cleanUrgencyReason('  Storm damage tonight '), 'Storm damage tonight');
+    assert.equal(cleanUrgencyReason(''), undefined);
+    assert.equal(cleanUrgencyReason(null), undefined);
+    assert.equal(cleanUrgencyReason(undefined), undefined);
   });
 });

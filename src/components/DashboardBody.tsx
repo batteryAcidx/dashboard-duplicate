@@ -1,17 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  Paperclip,
-  Calendar,
-  Image as ImageIcon,
-  PhoneMissed,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { Calendar, CalendarCheck, ChevronLeft, ChevronRight, Image as ImageIcon, MapPin, Paperclip, Phone, PhoneMissed } from 'lucide-react';
 import { LeadStatusControl, LeadStatus, STATUS_LABEL } from './LeadStatusControl';
 import { OverviewChart } from './OverviewChart';
 import { ContactTypeControl } from './ContactTypeControl';
 import { LeadDetailsCard } from './LeadDetailsCard';
 import { UrgencyBadge } from './UrgencyBadge';
+import { ConversationHeader } from './ConversationHeader';
 import { FILTER_LABEL, TYPE_LABEL, countByFilter, matchesFilter, showFilterBar, visibleFilters } from '../lib/leadView';
 import type { ContactType, DetailRow, LeadFilter, Urgency } from '../lib/leadView';
 import type { ChartData } from '../lib/chart';
@@ -37,6 +31,8 @@ export interface DashboardLead {
   insurance: string;
   scheduledTime: string;
   urgency?: Urgency;
+  /** the priority it was given, even if it is closed now */
+  urgencyRecorded?: Urgency;
   urgencyReason?: string;
   contactType?: ContactType;
   needsReview?: boolean;
@@ -115,6 +111,12 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
 
   const typeOf = (l: DashboardLead): ContactType => l.contactType ?? 'homeowner';
   const urgencyOf = (l: DashboardLead): Urgency => l.urgency ?? (l.priority ? 'urgent' : 'normal');
+  // what to SHOW: the priority it was given. It goes quiet (not hidden) once the lead is closed.
+  const urgencyShown = (l: DashboardLead): { level: Urgency; muted: boolean } => {
+    const active = urgencyOf(l);
+    const level = l.urgencyRecorded ?? active;
+    return { level, muted: level !== 'normal' && active === 'normal' };
+  };
   const counts = countByFilter(leads.map(typeOf));
   const filterBarOn = showFilterBar(counts);
   // if the chosen tab empties out, quietly fall back to All
@@ -158,7 +160,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
 
   return (
     <div className="mx-auto w-full max-w-5xl bg-[#0c101d]">
-      <div className="flex flex-col justify-start space-y-6 p-5 pb-12 sm:space-y-8 sm:p-8 lg:min-h-[600px] lg:p-10">
+      <div className="flex flex-col justify-start space-y-6 p-5 pb-5 sm:space-y-8 sm:p-8 sm:pb-8 lg:min-h-[600px] lg:p-10">
         {!hideTitleRow && (
           <div className={`items-center justify-between gap-4 ${inThreadOnPhone ? 'hidden lg:flex' : 'flex'}`}>
             <div>
@@ -314,7 +316,7 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                               <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#f59e0b] shadow-[0_0_8px_rgba(245,158,11,0.6)]" title="Unread conversation" />
                             )}
                             <span className="block truncate font-display text-base font-bold tracking-tight text-slate-100">{lead.name}</span>
-                            <UrgencyBadge urgency={urgencyOf(lead)} />
+                            <UrgencyBadge urgency={urgencyShown(lead).level} muted={urgencyShown(lead).muted} />
                           </div>
                           <span className="shrink-0 pt-0.5 text-xs text-slate-500">{lead.timeAgo}</span>
                         </div>
@@ -361,93 +363,64 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                 <div className={`flex min-h-0 flex-col justify-start lg:col-span-7 ${mobileView === 'list' ? 'hidden lg:flex' : 'flex'}`}>
                   {selectedLead ? (
                     <div className="w-full">
-                      {/* phones: a slim sticky bar with Back and the name */}
-                      <div className="sticky top-0 z-30 -mx-5 flex items-center gap-2 border-b border-white/[0.06] bg-[#0c101d]/95 px-5 py-1 backdrop-blur sm:-mx-8 sm:px-8 lg:hidden">
-                        <button
-                          type="button"
-                          onClick={handleBackToQueue}
-                          aria-label="Back to queue"
-                          className="-ml-2 inline-flex shrink-0 cursor-pointer items-center gap-1 py-3 pl-1 pr-3 font-display text-[15px] font-bold text-slate-300 transition-colors hover:text-[#ffc174]"
-                        >
-                          <ChevronLeft className="h-5 w-5 text-[#ffc174]" />
-                          <span>Back</span>
-                        </button>
-                        <span className="min-w-0 truncate font-display text-base font-bold tracking-tight text-slate-100">{selectedLead.name}</span>
-                        <UrgencyBadge urgency={urgencyOf(selectedLead)} size="phone" />
-                      </div>
+                      <ConversationHeader
+                        name={selectedLead.name}
+                        subtitle={[selectedLead.insurance && selectedLead.insurance !== 'Not specified' ? selectedLead.insurance : '', selectedLead.phone].filter(Boolean).join(' · ')}
+                        urgency={urgencyShown(selectedLead).level}
+                        urgencyMuted={urgencyShown(selectedLead).muted}
+                        callHref={selectedLead.phone ? telHref(selectedLead.phone) : undefined}
+                        onBack={handleBackToQueue}
+                      />
 
-                      <div className="mb-6 border-b border-white/[0.06] pb-6 pt-5 lg:pt-0">
-                        <div className="space-y-3">
-                          {/* desktop: name and badge */}
-                          <div className="hidden flex-wrap items-center gap-3 lg:flex">
-                            <h3 className="font-display text-2xl font-bold tracking-tight text-slate-100">{selectedLead.name}</h3>
-                            <UrgencyBadge urgency={urgencyOf(selectedLead)} size="header" />
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] leading-relaxed text-slate-300 lg:text-sm">
-                            {selectedLead.phone ? (
-                              <a
-                                href={telHref(selectedLead.phone)}
-                                className="inline-block py-1 font-data font-medium text-slate-100 underline decoration-[#ffc174]/40 underline-offset-4 lg:no-underline"
-                              >
-                                {selectedLead.phone}
-                              </a>
-                            ) : (
-                              <span className="text-slate-500">No phone</span>
-                            )}
-                            <span className="hidden h-1 w-1 shrink-0 rounded-full bg-slate-600 sm:inline-block" aria-hidden="true" />
-                            <span className="text-slate-300">{selectedLead.insurance}</span>
-                            <span className="hidden h-1 w-1 shrink-0 rounded-full bg-slate-600 sm:inline-block" aria-hidden="true" />
-                            {hasAddress ? (
-                              <a
-                                href={mapsHref(selectedLead.address)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block w-full py-1 text-slate-300 underline decoration-[#ffc174]/40 underline-offset-4 sm:inline sm:w-auto sm:py-0 lg:text-slate-400 lg:no-underline"
-                              >
-                                {selectedLead.address}
-                              </a>
-                            ) : (
-                              <span className="block w-full text-slate-500 sm:inline sm:w-auto">{selectedLead.address}</span>
-                            )}
-                          </div>
-
-                          {selectedLead.scheduledTime && (
-                            <div className="pt-1 text-[15px] font-semibold text-[#ffc174] lg:text-sm">{selectedLead.scheduledTime}</div>
-                          )}
-
-                          <div className="flex flex-wrap items-center gap-2.5 pt-3">
-                            {onChangeType && (
-                              <ContactTypeControl
-                                key={`type-${selectedLead.id}`}
-                                type={typeOf(selectedLead)}
-                                needsReview={Boolean(selectedLead.needsReview)}
-                                onChange={(t) => onChangeType(selectedLead.id, t)}
-                              />
-                            )}
-                            {onChangeStatus && (
-                              <LeadStatusControl
-                                key={selectedLead.id}
-                                status={selectedLead.status}
-                                finalValue={selectedLead.finalValue}
-                                changedBy={selectedLead.statusChangedBy}
-                                changedAtLabel={selectedLead.statusChangedLabel}
-                                onChange={(s, v) => onChangeStatus(selectedLead.id, s, v)}
-                              />
-                            )}
-                          </div>
-                        </div>
+                      {/* everything else about the person, in one slim row */}
+                      <div className="mb-4 mt-3 flex flex-wrap items-center gap-1.5 lg:mt-3">
+                        {selectedLead.scheduledTime && (
+                          <span className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#ffc174]/30 bg-[#ffc174]/10 px-3 text-[13px] font-semibold text-[#ffc174]">
+                            <CalendarCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                            {selectedLead.scheduledTime}
+                          </span>
+                        )}
+                        {hasAddress && (
+                          <a
+                            href={mapsHref(selectedLead.address)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`Directions to ${selectedLead.address}`}
+                            className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-[13px] text-slate-300 transition-colors hover:bg-white/[0.06]"
+                          >
+                            <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden="true" />
+                            <span className="truncate">{selectedLead.address}</span>
+                          </a>
+                        )}
+                        {onChangeType && (
+                          <ContactTypeControl
+                            key={`type-${selectedLead.id}`}
+                            type={typeOf(selectedLead)}
+                            needsReview={Boolean(selectedLead.needsReview)}
+                            onChange={(t) => onChangeType(selectedLead.id, t)}
+                          />
+                        )}
+                        {onChangeStatus && (
+                          <LeadStatusControl
+                            key={selectedLead.id}
+                            status={selectedLead.status}
+                            finalValue={selectedLead.finalValue}
+                            changedBy={selectedLead.statusChangedBy}
+                            changedAtLabel={selectedLead.statusChangedLabel}
+                            onChange={(s, v) => onChangeStatus(selectedLead.id, s, v)}
+                          />
+                        )}
                       </div>
 
                       <LeadDetailsCard
                         rows={selectedLead.details ?? []}
                         why={selectedLead.whyWithYou}
-                        urgency={urgencyOf(selectedLead)}
+                        urgency={urgencyShown(selectedLead).level}
                         urgencyReason={selectedLead.urgencyReason}
                       />
 
                       {/* messages: page scroll on phones, a scroll box only on desktop */}
-                      <div className="space-y-4 pb-6 lg:max-h-[440px] lg:space-y-4 lg:overflow-y-auto lg:pb-5 lg:pr-2">
+                      <div className="space-y-4 pb-1 lg:max-h-[440px] lg:space-y-4 lg:overflow-y-auto lg:pb-5 lg:pr-2">
                         {selectedLead.missedCallTime && (
                           <div className="flex items-center justify-center pb-1">
                             <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.07] bg-[#0a0e19] px-3.5 py-1.5 text-xs font-medium text-slate-400">

@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { getRefreshSeconds } from './preferences';
 
 /**
- * ONE place keeps every admin screen in step.
+ * ONE place keeps every screen in step (admin and client).
  * Each screen registers how to reload itself. The sync runs on a timer, the moment you come back to the tab,
  * and when you press the single "Sync" button in the header. No screen has its own refresh control.
  */
@@ -19,7 +19,8 @@ const SyncContext = createContext<SyncApi | null>(null);
 export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const loaders = useRef(new Map<string, () => Promise<unknown> | void>());
   const running = useRef(false);
-  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  // starts as "now": a page with nothing to load (Settings, the Wiki) is in sync from the start, not "Syncing…" forever
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(() => Date.now());
   const [syncing, setSyncing] = useState(false);
 
   const register = useCallback((id: string, load: () => Promise<unknown> | void) => {
@@ -65,8 +66,12 @@ export function useSync(): SyncApi | null {
   return useContext(SyncContext);
 }
 
-/** Loads a screen once, then lets the main sync keep it fresh. Pass a key that changes when the screen should start over. */
-export function useSynced(load: () => Promise<unknown> | void, key: string = ''): void {
+/**
+ * Loads a screen once, then lets the main sync keep it fresh. Pass a key that changes when the screen should start over.
+ * A screen that already does its own first load (to show a loading state or an error) passes { initial: false }.
+ */
+export function useSynced(load: () => Promise<unknown> | void, key: string = '', opts: { initial?: boolean } = {}): void {
+  const initial = opts.initial !== false;
   const sync = useContext(SyncContext);
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -74,7 +79,7 @@ export function useSynced(load: () => Promise<unknown> | void, key: string = '')
 
   useEffect(() => {
     const run = () => loadRef.current();
-    Promise.resolve(run()).finally(() => sync?.markSynced());
+    if (initial) Promise.resolve(run()).finally(() => sync?.markSynced());
     return sync ? sync.register(`${id.current}:${key}`, run) : undefined;
   }, [sync, key]);
 }

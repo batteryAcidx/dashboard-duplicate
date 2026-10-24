@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, ChevronDown, LogOut, RotateCcw } from 'lucide-react';
+import { ChevronDown, LogOut, RotateCcw } from 'lucide-react';
 import { authApi, isConfigured, ownerApi } from '../api';
-import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
+import { getCachedCompany, setCachedCompany, getCachedSetup } from '../lib/accountCache';
 import { formatBlock, zonedToUtc } from '../lib/tz';
 import { AppHeader } from '../components/AppHeader';
 import { PlatformFooter } from '../components/PlatformFooter';
-import { inputCls as uiInputCls } from '../components/ui';
+import { PageTitle, inputCls as uiInputCls } from '../components/ui';
 
 // Keep in sync with Supabase: Authentication > Sign In / Providers > Email > Minimum password length
 const MIN_PASSWORD_LENGTH = 10;
@@ -508,29 +508,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       <AppHeader
         companyName={companyName}
         userEmail={loginEmail || userEmail}
-        current="settings"
+        current="settings" showSetup={getCachedSetup(userEmail)}
         onNavigate={onNavigate}
         onSignOut={onSignOut}
       />
 
       <main className="mx-auto max-w-5xl px-4 sm:px-6 pb-[max(5rem,env(safe-area-inset-bottom))]">
-        <button
-          type="button"
-          onClick={() => goto('/queue')}
-          className="inline-flex items-center gap-1.5 mt-3 -ml-1 pl-1 pr-3 py-2.5 text-sm font-display font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4 text-[#ffc174]" />
-          Dashboard
-        </button>
 
-                <div className="mb-10 mt-8">
-          <span className="font-body text-xs tracking-wide text-[#f59e0b] font-bold block mb-2">
-            Account
-          </span>
-          <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-100 leading-none">
-            Settings
-          </h1>
-        </div>
+        <PageTitle eyebrow="Account" title="Settings" />
 
         {loading ? (
           <div role="status" aria-label="Loading settings" className="grid grid-cols-1 lg:grid-cols-2 gap-8">

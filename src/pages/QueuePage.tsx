@@ -7,11 +7,10 @@ import { LeadStatus } from '../components/LeadStatusControl';
 import { buildChart } from '../lib/chart';
 import { AppHeader } from '../components/AppHeader';
 import { PlatformFooter } from '../components/PlatformFooter';
-import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
-import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
+import { useSynced } from '../lib/sync';
+import { getCachedCompany, setCachedCompany, setCachedSetup } from '../lib/accountCache';
 import {
-  ContactType, activeUrgency, buildDetails, compareByUrgency, eventLabel, isCountedLead, normalizeType, whyWithYou,
-} from '../lib/leadView';
+  ContactType, activeUrgency, buildDetails, compareByUrgency, eventLabel, isCountedLead, normalizeType, whyWithYou, recordedUrgency, cleanUrgencyReason } from '../lib/leadView';
 
 /* ---------- time helpers (use the ACCOUNT's time zone, not the browser's) ---------- */
 
@@ -149,7 +148,6 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [windowKey, setWindowKey] = useState<WindowKey>('7d');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
   useEffect(() => {
     setSelectedLeadId(selectedConversationId);
@@ -165,7 +163,10 @@ export const QueuePage: React.FC<QueuePageProps> = ({
           setCachedCompany(userEmail, data.name);
         }
         if (data?.timezone) setTz(data.timezone);
-        if (data?.status) setAccountStatus(data.status);
+        if (data?.status) {
+          setAccountStatus(data.status);
+          setCachedSetup(userEmail, data.status === 'setup');
+        }
       });
   }, []);
 
@@ -225,7 +226,6 @@ export const QueuePage: React.FC<QueuePageProps> = ({
     } else {
       setError(null);
       setRows((data as unknown as LeadRow[]) || []);
-      setLastUpdated(Date.now());
       loadExtras();
     }
     setLoading(false);
@@ -255,35 +255,18 @@ export const QueuePage: React.FC<QueuePageProps> = ({
     loadLeads();
   }, [loadLeads]);
 
-  /* refresh every 60 seconds (this makes the "refreshes every 60s" label true) */
-  useEffect(() => {
-    const t = setInterval(() => {
-      loadLeads(true);
-      if (selectedLeadId) loadThread(selectedLeadId);
-    }, 60000);
-    return () => clearInterval(t);
-  }, [loadLeads, loadThread, selectedLeadId]);
-
   /* open a lead: load its thread */
   useEffect(() => {
     if (!selectedLeadId) return;
     loadThread(selectedLeadId);
   }, [selectedLeadId, loadThread]);
 
-    const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(async () => {
     await Promise.all([loadLeads(true), selectedLeadId ? loadThread(selectedLeadId) : Promise.resolve()]);
   }, [loadLeads, loadThread, selectedLeadId]);
 
-  const pull = usePullToRefresh(refreshAll);
-
-  // coming back to the app (unlocking the phone, switching apps) refreshes right away
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') refreshAll();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [refreshAll]);
+  // the one main Sync keeps this page fresh (on a timer, when you come back to the tab, and when you press Sync)
+  useSynced(refreshAll, selectedLeadId ?? '', { initial: false });
 
   /* mark a lead read (one place only) */
   const markRead = useCallback(async (id: string) => {
@@ -444,7 +427,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       timeAgo: ago(latest(r)),
       priority: urgencyNow(r) !== 'normal',
       urgency: urgencyNow(r),
-      urgencyReason: r.urgency_reason || undefined,
+      urgencyRecorded: recordedUrgency(r),
+      urgencyReason: cleanUrgencyReason(r.urgency_reason),
       contactType: type,
       needsReview: Boolean(r.phone_e164 && reviewPhones.has(r.phone_e164)),
       details: buildDetails({ collected: learned?.collected ?? null, photoCount: r.attachments.length }),
@@ -525,7 +509,6 @@ export const QueuePage: React.FC<QueuePageProps> = ({
 
   return (
     <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-body">
-          <PullIndicator pull={pull} lastUpdated={lastUpdated} />
       <AppHeader
         companyName={companyName}
         userEmail={userEmail}
@@ -533,17 +516,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
         isAdmin={isAdmin}
         onNavigate={onNavigate}
         onSignOut={onSignOut}
-        extra={
-          accountStatus === 'setup' ? (
-            <button
-              type="button"
-              onClick={() => (onNavigate ? onNavigate('/setup') : window.location.assign('/setup'))}
-              className="hidden h-11 cursor-pointer items-center rounded-xl border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-4 text-sm font-semibold text-[#ffc174] transition-colors hover:bg-[#f59e0b]/15 sm:inline-flex"
-            >
-              Setup progress
-            </button>
-          ) : null
-        }
+        showSetup={accountStatus === 'setup'}
+        hideTabs={Boolean(selectedLeadId)}
       />
 
       {loading ? (
@@ -580,7 +554,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
           onChangeType={handleChangeType}
         />
       )}
-      <PlatformFooter />
+      <PlatformFooter clearTabs={!selectedLeadId} />
     </div>
   );
 };

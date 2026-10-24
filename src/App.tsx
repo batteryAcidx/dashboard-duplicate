@@ -10,6 +10,7 @@ import { ContactsPage } from './pages/ContactsPage'; // CONTACTS
 import { AdminPage } from './pages/AdminPage'; // ADMIN
 import { NotFoundPage } from './pages/NotFoundPage';
 import { authApi } from './api';
+import { SyncProvider } from './lib/sync';
 import { parseTarget } from './domain';
 import { clearAccountCache } from './lib/accountCache';
 
@@ -205,7 +206,9 @@ export default function App() {
     window.history.replaceState({}, '', '/queue');
     return (
       <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
-        <QueuePage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} />
+        <SyncProvider>
+          <QueuePage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} />
+        </SyncProvider>
       </div>
     );
   }
@@ -222,6 +225,7 @@ export default function App() {
 
   // Render view
   return (
+    <SyncProvider>
     <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
       {isDirect404Preview ? (
         <NotFoundPage onNavigate={navigate} />
@@ -282,5 +286,6 @@ export default function App() {
         <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
       )}
     </div>
+    </SyncProvider>
   );
 }

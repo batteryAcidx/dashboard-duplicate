@@ -45,3 +45,14 @@ export function relativeTime(at: number | string | null | undefined, now: number
 
 /* ---------------------------------------------------------------- Stripe */
 
+
+/** "Marcus Brooks" becomes "MB", one name gives one letter, and a number with no name gives "#". */
+export function initialsOf(name: string | null | undefined): string {
+  const letters = (name ?? '')
+    .trim()
+    .split(/\s+/)
+    .map((p) => p.match(/[A-Za-z]/)?.[0] ?? '')
+    .filter(Boolean);
+  if (letters.length === 0) return '#';
+  return (letters.length === 1 ? letters[0] : letters[0] + letters[letters.length - 1]).toUpperCase();
+}

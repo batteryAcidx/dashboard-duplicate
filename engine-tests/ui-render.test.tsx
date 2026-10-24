@@ -29,7 +29,12 @@ import { RegistrationCard } from '../src/features/admin/tabs/RegistrationCard.ts
 import { IntegrationsPage } from '../src/integrations/IntegrationsPage.tsx';
 import { WikiPage } from '../src/integrations/WikiPage.tsx';
 import { SetupNeeds } from '../src/components/SetupNeeds.tsx';
+import { LeadDetailsCard } from '../src/components/LeadDetailsCard.tsx';
 import { PlatformFooter } from '../src/components/PlatformFooter.tsx';
+import { LeadStatusControl } from '../src/components/LeadStatusControl.tsx';
+import { OverviewChart } from '../src/components/OverviewChart.tsx';
+import { buildChart } from '../src/lib/chart.ts';
+import { URGENCY_LABEL } from '../src/lib/leadView.ts';
 import { readFileSync } from 'node:fs';
 import { IntegrationsProvider } from '../src/integrations/IntegrationsContext.tsx';
 import { NotPluggedIn } from '../src/integrations/NotPluggedIn.tsx';
@@ -97,10 +102,10 @@ describe('the conversation list', () => {
     assert.match(html, />EMERGENCY</);
   });
 
-  test('older lead objects with only the priority flag still render, as PRIORITY', () => {
+  test('older lead objects with only the priority flag still render, as HIGH PRIORITY', () => {
     const legacy: DashboardLead = { ...base, id: 'old', name: 'Old Lead', priority: true };
     const html = render({ leads: [legacy] });
-    assert.match(html, />PRIORITY</);
+    assert.match(html, />HIGH PRIORITY</);
     assert.doesNotMatch(html, /aria-label="Filter conversations"/);
   });
 });
@@ -132,7 +137,7 @@ describe('the small components', () => {
   test('urgency badge', () => {
     assert.equal(renderToStaticMarkup(<UrgencyBadge urgency="normal" />), '');
     assert.match(renderToStaticMarkup(<UrgencyBadge urgency="emergency" />), />EMERGENCY</);
-    assert.match(renderToStaticMarkup(<UrgencyBadge urgency="urgent" />), />PRIORITY</);
+    assert.match(renderToStaticMarkup(<UrgencyBadge urgency="urgent" />), />HIGH PRIORITY</);
     assert.match(renderToStaticMarkup(<UrgencyBadge urgency="urgent" size="header" />), />HIGH PRIORITY</);
   });
   test('type control starts closed and flags what needs confirming', () => {
@@ -147,13 +152,68 @@ describe('the small components', () => {
 
 
 // ---------------------------------------------------------------- the client header
-describe('the client header', () => {
-  test('shows the company, the person, and no menu until it is opened', () => {
-    const html = renderToStaticMarkup(<AppHeader companyName="Summit Roofing" userEmail="mike@summit.example" current="settings" />);
+describe('the client header and tabs', () => {
+  const header = (props: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(<SyncProvider><AppHeader companyName="Summit Roofing" userEmail="mike@summit.example" current="settings" {...props} /></SyncProvider>);
+
+  test('is light: the company, a small Sync icon, and an account button with just the initial', () => {
+    const html = header();
     assert.match(html, /Summit Roofing/);
-    assert.match(html, /mike@summit\.example/);
     assert.match(html, /aria-label="Account menu"/);
-    assert.doesNotMatch(html, />Contacts</);
+    assert.match(html, /aria-label="Sync everything now"/);
+    assert.match(html, /title="Synced just now\. Press to sync now\."/, 'the time is in the tooltip');
+    assert.doesNotMatch(html, />Synced just now</, 'no long text crowding the bar');
+    assert.doesNotMatch(html, /mike@summit\.example/, 'the email is not in the bar');
+    assert.match(html, />M</, 'the initial is');
+  });
+
+  test('the email is in the menu when it is opened', () => {
+    const html = renderToStaticMarkup(<SyncProvider><AppHeader companyName="S" userEmail="mike@summit.example" current="settings" initialOpen /></SyncProvider>);
+    assert.match(html.slice(html.indexOf('menu-panel')), /mike@summit\.example/);
+  });
+
+  test('the pages are tabs on a computer AND a bar along the bottom on a phone', () => {
+    const html = header();
+    assert.equal((html.match(/aria-label="Pages"/g) ?? []).length, 2, 'one bar for desktop, one for phones');
+    for (const label of ['Dashboard', 'Contacts', 'Settings']) assert.equal((html.match(new RegExp(`>${label}<`, 'g')) ?? []).length, 2, `${label} in both bars`);
+    assert.match(html, /fixed inset-x-0 bottom-0/);
+    assert.match(html, /grid-cols-3/);
+    assert.match(html, /md:hidden/);
+  });
+
+  test('the page you are on is lit up in both bars, and only that one', () => {
+    const html = header({ current: 'contacts' });
+    assert.equal((html.match(/aria-current="page"/g) ?? []).length, 2);
+    assert.match(html, /aria-current="page"[^>]*>(<svg[^>]*>\s*<\/svg>)?Contacts/);
+    assert.doesNotMatch(html, /aria-current="page"[^>]*>(<svg[^>]*>\s*<\/svg>)?Settings/);
+  });
+
+  test('a Setup tab shows only while the account is being set up', () => {
+    assert.doesNotMatch(header(), />Setup</);
+    const html = header({ showSetup: true });
+    assert.equal((html.match(/>Setup</g) ?? []).length, 2);
+    assert.match(html, /grid-cols-4/);
+    assert.match(header({ showSetup: true, current: 'registration' }), /aria-current="page"[^>]*>(<svg[^>]*>\s*<\/svg>)?Setup/);
+  });
+
+  test('inside a conversation the bottom bar steps aside, so it never covers the message controls', () => {
+    const html = header({ hideTabs: true });
+    assert.equal((html.match(/aria-label="Pages"/g) ?? []).length, 1, 'only the desktop tabs remain');
+    assert.doesNotMatch(html, /fixed inset-x-0 bottom-0/);
+    assert.match(html, /aria-label="Sync everything now"/);
+  });
+
+  test('the account menu holds just Sign out, plus a way back to the admin for admins', () => {
+    const menu = (isAdmin: boolean) => {
+      const html = renderToStaticMarkup(<SyncProvider><AppHeader companyName="S" userEmail="m@s.co" current="dashboard" isAdmin={isAdmin} initialOpen /></SyncProvider>);
+      return html.slice(html.indexOf('menu-panel'));
+    };
+    const client = menu(false);
+    assert.match(client, />Sign out</);
+    for (const page of ['Contacts', 'Settings', 'Dashboard', 'Admin']) assert.doesNotMatch(client.slice(0, client.indexOf('</div></div>')), new RegExp(`>${page}<`), `${page} is a tab, not a menu item`);
+    const admin = menu(true);
+    assert.match(admin, />Admin</);
+    assert.match(admin, />Sign out</);
   });
 });
 
@@ -475,7 +535,7 @@ describe('admin: the legacy GoHighLevel card and the updated indicator', () => {
   test('there is ONE sync button, in the header, and no screen has its own refresh', () => {
     const html = renderToStaticMarkup(<SyncProvider><SyncIndicator /></SyncProvider>);
     assert.match(html, /aria-label="Sync everything now"/);
-    assert.match(html, /Syncing/);
+    assert.match(html, /Synced just now/, 'a page with nothing to load is in sync from the start, never stuck on Syncing');
     assert.equal(renderToStaticMarkup(<SyncIndicator />), '', 'outside the admin there is nothing to show');
     const shell = renderToStaticMarkup(<AdminShell section="clients" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
     assert.equal((shell.match(/aria-label="Sync everything now"/g) ?? []).length, 1);
@@ -1006,7 +1066,7 @@ describe('integrations: a guide you can tick off', () => {
 });
 
 
-describe('the open account menus really follow the rule', () => {
+describe('the open admin menus really follow the rule', () => {
   const adminMenuHtml = (section: 'clients' | 'integrations' | 'settings' | 'wiki') => {
     const html = renderToStaticMarkup(<AdminShell section={section} initialOpen userEmail="me@wedgescale.com" onNavigate={() => {}}><p>x</p></AdminShell>);
     return html.slice(html.indexOf('menu-panel'), html.indexOf('</header>'));
@@ -1031,24 +1091,6 @@ describe('the open account menus really follow the rule', () => {
     assert.match(m, />Settings</);
   });
 
-  test('a client on Settings does not see Settings, on Contacts does not see Contacts', () => {
-    const menu = (current: 'dashboard' | 'contacts' | 'settings', isAdmin = false) => {
-      const html = renderToStaticMarkup(<AppHeader companyName="Summit" userEmail="m@s.co" current={current} isAdmin={isAdmin} initialOpen />);
-      return html.slice(html.indexOf('menu-panel'));
-    };
-    const onSettings = menu('settings');
-    assert.doesNotMatch(onSettings, />Settings</);
-    assert.match(onSettings, />Dashboard</);
-    assert.match(onSettings, />Contacts</);
-    assert.match(onSettings, />Sign out</);
-    const onContacts = menu('contacts');
-    assert.doesNotMatch(onContacts, />Contacts</);
-    assert.match(onContacts, />Settings</);
-    const onDash = menu('dashboard');
-    assert.doesNotMatch(onDash, />Dashboard</);
-    assert.doesNotMatch(onDash, />Admin</);
-    assert.match(menu('dashboard', true), />Admin</);
-  });
 });
 
 
@@ -1063,12 +1105,424 @@ describe('the client side ends with the platform footer, like the sign-in page',
   test('every client page includes it exactly once', () => {
     for (const page of ['QueuePage', 'ContactsPage', 'SettingsPage', 'SetupPage', 'RegistrationPage']) {
       const text = readFileSync(`../src/pages/${page}.tsx`, 'utf8');
-      assert.equal((text.match(/<PlatformFooter \/>/g) ?? []).length, 1, `${page} should end with the footer`);
+      assert.equal((text.match(/<PlatformFooter( clearTabs=\{[^}]*\})? \/>/g) ?? []).length, 1, `${page} should end with the footer`);
     }
   });
 
   test('the admin does not get it: that is the client side only', () => {
     const html = renderToStaticMarkup(<AdminShell section="clients" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
     assert.doesNotMatch(html, /WedgeScale Dashboard Platform/);
+  });
+});
+
+describe('the client pages use the one main Sync, not their own refresh', () => {
+  const page = (name: string) => readFileSync(`../src/pages/${name}.tsx`, 'utf8');
+
+  test('no client page has its own timer, tab-visibility listener, or pull-to-refresh', () => {
+    for (const name of ['QueuePage', 'SetupPage', 'ContactsPage', 'SettingsPage', 'RegistrationPage']) {
+      const text = page(name);
+      assert.doesNotMatch(text, /setInterval\(/, `${name} has its own timer`);
+      assert.doesNotMatch(text, /visibilitychange/, `${name} listens for the tab coming back by itself`);
+      assert.doesNotMatch(text, /PullToRefresh|PullIndicator/, `${name} still has pull-to-refresh`);
+    }
+  });
+
+  test('the pages that show live data register with the sync', () => {
+    for (const name of ['QueuePage', 'SetupPage', 'ContactsPage']) assert.match(page(name), /useSynced\(/, `${name} should join the sync`);
+  });
+
+  test('the dashboard hides the bottom bar inside a conversation', () => {
+    assert.match(page('QueuePage'), /hideTabs=\{Boolean\(selectedLeadId\)\}/);
+  });
+
+  test('every client page tells the header where it is, so the right tab is lit', () => {
+    for (const [name, current] of [['QueuePage', 'dashboard'], ['ContactsPage', 'contacts'], ['SettingsPage', 'settings'], ['SetupPage', 'setup'], ['RegistrationPage', 'registration']]) {
+      assert.match(page(name), new RegExp(`current="${current}"`), name);
+    }
+  });
+});
+
+
+describe('the chart on a phone', () => {
+  const row = (daysAgo: number, booked: boolean) => ({
+    status: 'following_up', missed_call_at: new Date(Date.now() - daysAgo * 86400000).toISOString(), created_at: new Date(Date.now() - daysAgo * 86400000).toISOString(),
+    appointments: booked ? [{ status: 'scheduled' }] : [],
+  });
+  const rows = [row(0, true), row(0, false), row(1, false), row(3, true), row(9, false), row(20, true)];
+
+  test('the numbers lead, and the period is stated in words', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart(rows, '30d', 'America/Chicago')} />);
+    assert.match(html, />Missed calls and bookings</);
+    assert.match(html, /<span[^>]*text-3xl[^>]*>6<\/span><span[^>]*>missed</);
+    assert.match(html, /<span[^>]*text-3xl[^>]*>3<\/span><span[^>]*>booked</);
+    assert.match(html, />Last 30 days, by day</);
+    assert.match(html, />Missed</);
+    assert.match(html, />Booked</);
+  });
+
+  test('the last date label is pinned to the right edge, so it can never be cut off', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart(rows, '30d', 'America/Chicago')} />);
+    assert.match(html, /<span class="absolute[^"]*right-0[^"]*">Today<\/span>/);
+    assert.doesNotMatch(html, /-translate-x-1\/2[^"]*">Today</, 'not centered under the last bar');
+    assert.equal((html.match(/>Today</g) ?? []).length, 1);
+  });
+
+  test('a label near the left edge leans in, and the middle ones stay centered', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart(rows, '30d', 'America/Chicago')} />);
+    assert.match(html, /<span class="absolute[^"]*left-0[^"]*">[A-Z][a-z]{2} \d+<\/span>/);
+    assert.match(html, /left-1\/2 -translate-x-1\/2[^"]*">[A-Z][a-z]{2} \d+</);
+  });
+
+  test('24 hours ends with "Now" at the edge', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart([row(0, false)], '24h', 'America/Chicago')} />);
+    assert.match(html, /right-0[^"]*">Now<\/span>/);
+    assert.match(html, />Last 24 hours, by hour</);
+  });
+
+  test('7 days shows every weekday', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart(rows, '7d', 'America/Chicago')} />);
+    assert.match(html, />Last 7 days, by day</);
+    assert.equal((html.match(/>(Mon|Tue|Wed|Thu|Fri|Sat|Sun)<\/span>/g) ?? []).length, 7);
+  });
+
+  test('every bar can be pressed, with a full description for screen readers', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart(rows, '7d', 'America/Chicago')} />);
+    assert.equal((html.match(/aria-label="[^"]*: \d+ missed, \d+ booked"/g) ?? []).length, 7);
+    assert.match(html, /class="sr-only"/);
+  });
+
+  test('nothing to show says so, without an empty chart', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart([], '30d', 'America/Chicago')} />);
+    assert.match(html, /No missed calls in this period/);
+    assert.doesNotMatch(html, /Bars by period/);
+  });
+});
+
+describe('the conversation header', () => {
+  const open = (id: string, extra: Partial<React.ComponentProps<typeof DashboardBody>> = {}) => render({ selectedLeadId: id, onChangeType: async () => null, onChangeStatus: async () => null, ...extra });
+  const one = (over: Partial<DashboardLead>) => render({ selectedLeadId: 'x1', leads: [{ ...base, id: 'x1', name: 'Test Person', ...over }], onChangeType: async () => null, onChangeStatus: async () => null });
+  const header = (html: string) => html.slice(html.indexOf('<header aria-label="Conversation"'), html.indexOf('</header>') + 9);
+  const row = (html: string) => html.slice(html.indexOf('</header>'), html.indexOf('aria-label="What we know"') > 0 ? html.indexOf('aria-label="What we know"') : undefined);
+
+  test('is one compact row, like a chat app: back, avatar, name, one quiet line, and one Call button', () => {
+    const h = header(open('em'));
+    assert.match(h, /aria-label="Back to queue"/);
+    assert.match(h, /lg:hidden/, 'Back is for phones only');
+    assert.match(h, />MB</, 'initials avatar');
+    assert.match(h, /h-10 w-10[^>]*>MB/, 'a small avatar');
+    assert.equal((h.match(/<h3/g) ?? []).length, 1);
+    assert.match(h, /<h3[^>]*>Marcus Brooks<\/h3>/);
+    assert.match(h, /\(214\) 555-0101/);
+    assert.equal((h.match(/<a /g) ?? []).length, 1, 'just one button in the header');
+  });
+
+  test('it is a lot smaller than the old card: no large avatar, no tall buttons, no card around it', () => {
+    const html = open('em');
+    const h = header(html);
+    for (const big of ['h-14 w-14', 'h-12 ', 'p-5 sm:p-6', 'text-2xl']) assert.ok(!h.includes(big), `${big} should not be in the header`);
+    assert.doesNotMatch(html, /aria-label="Contact"/);
+    assert.ok(h.length < 2400, `the header markup is short (${h.length})`);
+  });
+
+  test('the quiet line shows the job and the number, and skips "Not specified"', () => {
+    assert.match(header(open('em')), /<p[^>]*>\(214\) 555-0101<\/p>/);
+    assert.doesNotMatch(header(open('em')), /Not specified/);
+    assert.match(header(one({ insurance: 'Roof repair' })), /<p[^>]*>Roof repair · \(214\) 555-0101<\/p>/);
+  });
+
+  test('Call is a round icon with the person\'s name for screen readers, and is missing when there is no number', () => {
+    assert.match(header(open('em')), /<a href="tel:[^"]*"[^>]*aria-label="Call Marcus Brooks"/);
+    assert.doesNotMatch(header(one({ phone: '' })), /aria-label="Call /);
+  });
+
+  test('the address is one tappable chip that opens directions, and is missing when there is none', () => {
+    const r = row(open('em'));
+    assert.match(r, /<a href="https:\/\/[^"]*"[^>]*target="_blank"[^>]*rel="noopener noreferrer"/);
+    assert.match(r, /aria-label="Directions to 1 A St, Dallas"/);
+    assert.match(r, />1 A St, Dallas</);
+    assert.doesNotMatch(row(one({ address: '' })), /Directions to/);
+    assert.doesNotMatch(open('em'), />Directions</, 'there is no separate big Directions button any more');
+  });
+
+  test('the inspection time is a small gold chip, only when there is one', () => {
+    assert.match(row(one({ scheduledTime: 'Tue, Oct 21 · 2:00 PM' })), /text-\[#ffc174\][\s\S]*?Tue, Oct 21 · 2:00 PM/);
+    assert.doesNotMatch(row(open('em')), /border-\[#ffc174\]\/30/);
+  });
+
+  test('the controls sit in the same slim row', () => {
+    const r = row(open('pc'));
+    assert.match(r, /Who is this\? Currently Past client/);
+    assert.match(r, /flex flex-wrap items-center gap-1\.5/);
+  });
+
+  test('the urgency badge sits beside the name, once', () => {
+    assert.equal((header(open('em')).match(/>EMERGENCY</g) ?? []).length, 1);
+    assert.equal((header(open('hm')).match(/EMERGENCY|PRIORITY/g) ?? []).length, 0, 'nothing for a routine lead');
+  });
+
+  test('on a phone it stays at the top while you read, and on a computer it just sits there', () => {
+    const h = header(open('em'));
+    assert.match(h, /sticky top-0/);
+    assert.match(h, /lg:static/);
+  });
+});
+
+
+describe('the quiet client bar', () => {
+  const bar = (props: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(<SyncProvider><AppHeader companyName="Summit Roofing" userEmail="mike@summit.example" current="contacts" showSetup {...props} /></SyncProvider>);
+  const desktopNav = (html: string) => html.slice(html.indexOf('<nav class="hidden'), html.indexOf('</nav>') + 6);
+  const tag = (html: string, label: string) => (html.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`)) ?? [''])[0];
+
+  test('tabs are plain text with a thin gold underline on the current one, not filled pills', () => {
+    const nav = desktopNav(bar());
+    assert.equal((nav.match(/h-0\.5 rounded-full bg-\[#f59e0b\]/g) ?? []).length, 1, 'exactly one underline');
+    assert.doesNotMatch(nav, /bg-white\/\[0\.07\]/, 'no filled pill');
+    assert.match(nav, /aria-current="page"[^>]*>Contacts/);
+    for (const l of ['Dashboard', 'Setup', 'Settings']) assert.match(nav, new RegExp(`>${l}`));
+  });
+
+  test('Sync and the account button have no boxes around them', () => {
+    const html = bar();
+    for (const label of ['Sync everything now', 'Account menu']) {
+      const t = tag(html, label);
+      assert.ok(t, `${label} exists`);
+      assert.doesNotMatch(t, /border/, `${label} has a border`);
+      assert.match(t, /rounded-full/);
+    }
+    assert.doesNotMatch(html, /data-icon="ChevronDown"/, 'no chevron on the account button');
+  });
+
+  test('the company name is lighter than before', () => {
+    assert.match(bar(), /<span class="min-w-0 truncate font-display text-lg font-bold[^"]*">Summit Roofing</);
+    assert.doesNotMatch(bar(), /text-xl font-extrabold/);
+  });
+});
+
+
+describe('the centered dialogs', () => {
+  const typeDialog = (props: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(<ContactTypeControl type="past_client" needsReview onChange={async () => null} initialOpen {...props} />);
+  const statusDialog = (props: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(<LeadStatusControl status="following_up" finalValue={null} changedBy="owner" changedAtLabel="9:57 AM" onChange={async () => null} initialOpen {...props} />);
+
+  test('closed, each control is just a small chip', () => {
+    const html = renderToStaticMarkup(<ContactTypeControl type="homeowner" needsReview={false} onChange={async () => null} />) + renderToStaticMarkup(<LeadStatusControl status="booked" finalValue={null} changedBy="system" changedAtLabel="" onChange={async () => null} />);
+    assert.doesNotMatch(html, /role="dialog"/);
+    assert.equal((html.match(/h-8 /g) ?? []).length >= 2, true, 'chips are 32px tall');
+    assert.doesNotMatch(html, /h-10 items-center gap-2 rounded-xl/, 'the old big chip is gone');
+  });
+
+  test('"Who is this?" opens a dialog in the middle of the screen, not a sheet from the bottom', () => {
+    const html = typeDialog();
+    assert.match(html, /role="dialog"[^>]*aria-modal="true"/);
+    assert.match(html, /fixed inset-0 z-\[60\] flex items-center justify-center/);
+    assert.doesNotMatch(html, /fixed inset-x-0 bottom-0/, 'no bottom sheet');
+    assert.match(html, /<h2[^>]*>Who is this\?<\/h2>/);
+    assert.match(html, /aria-label="Close"/);
+    assert.match(html, /bg-black\/60/, 'the page is dimmed behind it');
+  });
+
+  test('every kind of caller is a clear choice with a line of help, and the current one is marked', () => {
+    const html = typeDialog();
+    assert.match(html, /role="radiogroup"/);
+    assert.ok((html.match(/role="radio"/g) ?? []).length >= 4);
+    assert.equal((html.match(/aria-checked="true"/g) ?? []).length, 1, 'exactly one is chosen');
+    assert.match(html, /aria-checked="true"[^>]*>[\s\S]*?Past client/);
+    assert.match(html, /Sorted automatically\. Tap a type to confirm it or change it\./);
+    assert.match(html, /bg-\[#f59e0b\]/, 'the chosen one has the gold dot');
+  });
+
+  test('"Set status" lists the six statuses, each with a plain explanation', () => {
+    const html = statusDialog();
+    assert.match(html, /<h2[^>]*>Set status<\/h2>/);
+    assert.equal((html.match(/role="radio"/g) ?? []).length, 6);
+    for (const [label, hint] of [['Booked', 'An inspection is on the calendar'], ['Following up', 'We are still texting them'], ['Needs you', 'Waiting for you to step in'], ['Won', 'You got the job'], ['Lost', 'It did not work out'], ['Not a lead', 'Wrong number, spam or a vendor']]) {
+      assert.match(html, new RegExp(`>${label}<`));
+      assert.match(html, new RegExp(hint));
+    }
+    assert.match(html, /aria-checked="true"[^>]*>[\s\S]*?Following up/);
+  });
+
+  test('it says who changed it and when, quietly at the bottom', () => {
+    assert.match(statusDialog(), /Updated by you · 9:57 AM/);
+    assert.match(statusDialog({ changedBy: 'system', changedAtLabel: '' }), /Updated automatically</);
+    assert.match(statusDialog({ changedBy: 'support' }), /Updated by WedgeScale support/);
+  });
+
+  test('"Won" asks for the job value on its own step, with a big field and a clear Save', () => {
+    const html = statusDialog({ initialOpen: 'value', finalValue: 12500 });
+    assert.match(html, /<h2[^>]*>Final job value<\/h2>/);
+    assert.match(html, /aria-label="Final job value in dollars"/);
+    assert.match(html, /value="12500"/);
+    assert.match(html, />Save</);
+    assert.match(html, />Back</);
+    assert.doesNotMatch(html, /role="radio"/, 'the list is gone on this step');
+    assert.doesNotMatch(html, /Updated by you/);
+  });
+
+  test('a won job shows its value on the chip', () => {
+    const html = renderToStaticMarkup(<LeadStatusControl status="won" finalValue={10000} changedBy="owner" changedAtLabel="" onChange={async () => null} />);
+    assert.match(html, /Won · \$10,000/);
+  });
+});
+
+describe('the bottom of a page ends naturally', () => {
+  test('on a page with the bottom bar the footer leaves room for it, and on a computer it does not', () => {
+    const html = renderToStaticMarkup(<PlatformFooter />);
+    assert.match(html, /pb-\[calc\(6rem\+env\(safe-area-inset-bottom\)\)\]/);
+    assert.match(html, /md:pb-\[max\(2rem/);
+  });
+
+  test('inside a conversation the bar is hidden, so the footer takes only a little room', () => {
+    const html = renderToStaticMarkup(<PlatformFooter clearTabs={false} />);
+    assert.match(html, /pb-\[max\(1\.5rem,env\(safe-area-inset-bottom\)\)\]/);
+    assert.doesNotMatch(html, /6rem/);
+    assert.doesNotMatch(html, /pb-28/);
+  });
+
+  test('the dashboard tells the footer when the bar is hidden', () => {
+    assert.match(readFileSync('../src/pages/QueuePage.tsx', 'utf8'), /<PlatformFooter clearTabs=\{!selectedLeadId\} \/>/);
+  });
+
+  test('less padding is stacked under a conversation than before', () => {
+    const text = readFileSync('../src/components/DashboardBody.tsx', 'utf8');
+    assert.doesNotMatch(text, /p-5 pb-12/);
+    assert.match(text, /p-5 pb-5 /);
+    assert.match(text, /space-y-4 pb-1 lg:max-h-\[440px\]/);
+  });
+
+  test('the detail chips under the header are small', () => {
+    const r = renderToStaticMarkup(
+      <DashboardBody companyName="S" stats={stats} leads={[{ ...base, id: 'c1', name: 'Chip Test', scheduledTime: 'Tue 2 PM' }]} selectedLeadId="c1" onSelectLead={() => {}} onChangeType={async () => null} onChangeStatus={async () => null} />
+    );
+    const rowHtml = r.slice(r.indexOf('</header>'), r.indexOf('aria-label="What we know"') > 0 ? r.indexOf('aria-label="What we know"') : undefined);
+    assert.ok((rowHtml.match(/h-8 /g) ?? []).length >= 4, 'time, address and both controls are 32px');
+    assert.doesNotMatch(rowHtml, /h-10 /);
+  });
+});
+
+describe('no back-to-dashboard button on the tab pages, and centered tabs', () => {
+  const page = (name: string) => readFileSync(`../src/pages/${name}.tsx`, 'utf8');
+
+  test('Contacts, Settings and Setup have no Dashboard button: the tab bar already does that', () => {
+    for (const name of ['ContactsPage', 'SettingsPage', 'SetupPage']) {
+      assert.doesNotMatch(page(name), /goto\('\/queue'\)/, `${name} still has a way back to the dashboard`);
+      assert.doesNotMatch(page(name), /ArrowLeft/, `${name} still has a back arrow`);
+    }
+  });
+
+  test('the registration form keeps its way back to Setup, because it is not a tab', () => {
+    assert.match(page('RegistrationPage'), /goto\('\/setup'\)/);
+  });
+
+  test('on a computer the tabs sit in the middle, with the name on the left and Sync and account on the right', () => {
+    const html = renderToStaticMarkup(<SyncProvider><AppHeader companyName="Summit" userEmail="a@b.co" current="dashboard" /></SyncProvider>);
+    assert.match(html, /md:grid md:grid-cols-\[1fr_auto_1fr\]/);
+    assert.match(html, /md:justify-self-end/);
+    const order = ['>Summit<', 'aria-label="Pages"', 'aria-label="Sync everything now"'].map((m) => html.indexOf(m));
+    assert.deepEqual([...order].sort((a, b) => a - b), order, 'name, then tabs, then Sync and account');
+  });
+});
+
+describe('priority is shown whenever a lead has one, with the same words everywhere', () => {
+  const closedEmergency: DashboardLead = {
+    ...base, id: 'won1', name: 'Marcus Brooks', status: 'won', urgency: 'normal', urgencyRecorded: 'emergency', urgencyReason: 'Active leak right now',
+    details: [{ label: 'Needs', value: 'active leak' }],
+  };
+  const header = (html: string) => html.slice(html.indexOf('<header aria-label="Conversation"'), html.indexOf('</header>') + 9);
+
+  test('the words: Emergency and High priority, never a bare "Priority", and nothing for a routine lead', () => {
+    assert.match(renderToStaticMarkup(<UrgencyBadge urgency="emergency" />), />EMERGENCY</);
+    assert.match(renderToStaticMarkup(<UrgencyBadge urgency="urgent" />), />HIGH PRIORITY</);
+    for (const size of ['row', 'header', 'phone'] as const) assert.match(renderToStaticMarkup(<UrgencyBadge urgency="urgent" size={size} />), />HIGH PRIORITY</, `size ${size}`);
+    assert.equal(renderToStaticMarkup(<UrgencyBadge urgency="normal" />), '');
+    assert.equal(URGENCY_LABEL.urgent, 'High priority');
+    assert.equal(URGENCY_LABEL.emergency, 'Emergency');
+  });
+
+  test('a lead that was an emergency but is now won still shows it, quietly, in the conversation', () => {
+    const html = render({ leads: [closedEmergency], selectedLeadId: 'won1' });
+    const h = header(html);
+    assert.match(h, />EMERGENCY</);
+    assert.match(h, /title="Emergency, no longer active"/);
+    assert.match(h, /text-slate-500/);
+    assert.doesNotMatch(h, /bg-red-500\/10/, 'not the loud red of a live emergency');
+  });
+
+  test('and in the list, so you can still see which jobs were emergencies', () => {
+    const html = render({ leads: [closedEmergency] });
+    assert.match(html, /title="Emergency, no longer active"/);
+    assert.match(html, />EMERGENCY</);
+  });
+
+  test('a live emergency is loud, with no "no longer active" note', () => {
+    const live: DashboardLead = { ...base, id: 'live1', name: 'Live One', urgency: 'emergency', urgencyRecorded: 'emergency', urgencyReason: 'Active leak' };
+    const h = header(render({ leads: [live], selectedLeadId: 'live1' }));
+    assert.match(h, /bg-red-500\/10/);
+    assert.doesNotMatch(h, /no longer active/);
+  });
+
+  test('a routine lead shows no badge at all, live or closed', () => {
+    for (const status of ['following_up', 'won'] as const) {
+      const routine: DashboardLead = { ...base, id: 'r1', name: 'Routine One', status, urgency: 'normal', urgencyRecorded: 'normal' };
+      const html = render({ leads: [routine], selectedLeadId: 'r1' });
+      assert.doesNotMatch(header(html), /EMERGENCY|HIGH PRIORITY/);
+    }
+  });
+
+  test('the reason is kept too: "Emergency: Active leak right now" stays on a closed job', () => {
+    const html = render({ leads: [closedEmergency], selectedLeadId: 'won1' });
+    assert.match(html, /Emergency: Active leak right now/);
+  });
+
+  test('the details card uses the same words', () => {
+    assert.match(renderToStaticMarkup(<LeadDetailsCard rows={[{ label: 'Needs', value: 'x' }]} urgency="urgent" urgencyReason="Storm damage tonight" />), /High priority: Storm damage tonight/);
+    assert.match(renderToStaticMarkup(<LeadDetailsCard rows={[{ label: 'Needs', value: 'x' }]} urgency="emergency" urgencyReason="Active leak" />), /Emergency: Active leak/);
+  });
+});
+
+describe('page titles are written the same way on every page', () => {
+  const read = (name: string) => readFileSync(`../src/pages/${name}.tsx`, 'utf8');
+
+  test('Contacts and Settings use the shared title, with a small label in normal capitals', () => {
+    assert.match(read('ContactsPage'), /<PageTitle\s+eyebrow="People"\s+title="Contacts"/);
+    assert.match(read('SettingsPage'), /<PageTitle eyebrow="Account" title="Settings" \/>/);
+  });
+
+  test('no small label is written in all capitals, and none is hand-made', () => {
+    const labels: [string, string][] = [];
+    for (const name of ['ContactsPage', 'SettingsPage', 'SetupPage', 'RegistrationPage']) {
+      for (const m of read(name).matchAll(/eyebrow="([^"]+)"/g)) labels.push([name, m[1]]);
+      for (const m of read(name).matchAll(/text-\[#f59e0b\][^>]*>\s*([A-Za-z ]+?)\s*<\/span>/g)) labels.push([name, m[1]]);
+    }
+    assert.ok(labels.length >= 3, 'found the labels');
+    for (const [page, label] of labels) assert.notEqual(label, label.toUpperCase(), `${page}: "${label}" is all capitals`);
+    assert.doesNotMatch(read('ContactsPage'), /PEOPLE/);
+    assert.doesNotMatch(read('ContactsPage'), /tracking-wide text-\[#f59e0b\] font-bold/);
+    assert.doesNotMatch(read('SettingsPage'), /tracking-wide text-\[#f59e0b\] font-bold/);
+  });
+});
+
+
+describe('an old lead that was only flagged', () => {
+  test('keeps its priority badge but not the useless sentence, in the page that builds the lead', () => {
+    const page = readFileSync('../src/pages/QueuePage.tsx', 'utf8');
+    assert.match(page, /urgencyReason: cleanUrgencyReason\(r\.urgency_reason\)/);
+    assert.doesNotMatch(page, /urgencyReason: r\.urgency_reason/);
+  });
+
+  test('a flagged lead with no reason shows the badge and no "High priority:" line', () => {
+    const flagged: DashboardLead = { ...base, id: 'old1', name: 'Older Lead', urgency: 'urgent', urgencyRecorded: 'urgent', urgencyReason: undefined };
+    const html = render({ leads: [flagged], selectedLeadId: 'old1' });
+    assert.match(html, />HIGH PRIORITY</);
+    assert.doesNotMatch(html, /High priority:/);
+    assert.doesNotMatch(html, /before the engine/);
+  });
+
+  test('the sentence is nowhere in what the screens can show', () => {
+    for (const f of ['components/DashboardBody.tsx', 'components/LeadDetailsCard.tsx', 'components/ConversationHeader.tsx']) {
+      assert.doesNotMatch(readFileSync(`../src/${f}`, 'utf8'), /before the engine/, f);
+    }
   });
 });

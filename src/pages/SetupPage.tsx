@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, RotateCcw } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { isConfigured, ownerApi } from '../api';
-import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
-import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
+import { useSynced } from '../lib/sync';
+import { getCachedCompany, setCachedCompany, setCachedSetup } from '../lib/accountCache';
 import { AppHeader } from '../components/AppHeader';
 import { PlatformFooter } from '../components/PlatformFooter';
 import { SetupStepCard } from '../components/SetupStepCard';
@@ -56,7 +56,10 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
         setCachedCompany(userEmail, acc.data.name);
       }
       if (acc.data.timezone) setTz(acc.data.timezone);
-      if (acc.data.status) setAccountStatus(acc.data.status);
+      if (acc.data.status) {
+        setAccountStatus(acc.data.status);
+        setCachedSetup(userEmail, acc.data.status === 'setup');
+      }
     }
     setRegistration(reg.data?.status ? { status: reg.data.status, submitted_at: reg.data.submitted_at ?? null } : null);
     setCalendar(cal.data && cal.data.provider !== 'none' ? { status: cal.data.status, label: cal.data.calendar_label ?? null } : null);
@@ -70,12 +73,12 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
     setLoading(false);
   }, [userEmail]);
 
-  // loads, then keeps itself up to date quietly. On a phone, pulling down refreshes right away.
   useEffect(() => {
     load();
-    const t = setInterval(() => load(true), 60000);
-    return () => clearInterval(t);
   }, [load]);
+
+  // the one main Sync keeps this page fresh
+  useSynced(() => load(true), '', { initial: false });
 
   // Google sends the owner back here with ?calendar=connected or ?calendar=error
   useEffect(() => {
@@ -92,8 +95,6 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const pull = usePullToRefresh(() => load(true));
 
   const goto = (path: string) => {
     if (onNavigate) onNavigate(path);
@@ -122,18 +123,9 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
 
   return (
     <div className="min-h-screen w-full bg-[#090e1c] font-body text-[#dee1f7]">
-      <PullIndicator pull={pull} />
-      <AppHeader companyName={companyName} userEmail={userEmail} current="setup" onNavigate={goto} onSignOut={onSignOut} />
+      <AppHeader companyName={companyName} userEmail={userEmail} current="setup" showSetup onNavigate={goto} onSignOut={onSignOut} />
 
       <main className="mx-auto max-w-3xl px-5 pb-[max(5rem,env(safe-area-inset-bottom))] sm:px-8">
-        <button
-          type="button"
-          onClick={() => goto('/queue')}
-          className="mt-4 -ml-1 inline-flex cursor-pointer items-center gap-2 py-2.5 pl-1 pr-3 font-display text-sm font-semibold text-slate-400 transition-colors hover:text-[#ffc174]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Dashboard
-        </button>
 
         {loading ? (
           <div role="status" aria-label="Loading setup progress" className="mt-6 animate-pulse space-y-4">
