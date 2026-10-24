@@ -30,6 +30,8 @@ import { IntegrationsPage } from '../src/integrations/IntegrationsPage.tsx';
 import { WikiPage } from '../src/integrations/WikiPage.tsx';
 import { SetupNeeds } from '../src/components/SetupNeeds.tsx';
 import { PlatformFooter } from '../src/components/PlatformFooter.tsx';
+import { OverviewChart } from '../src/components/OverviewChart.tsx';
+import { buildChart } from '../src/lib/chart.ts';
 import { readFileSync } from 'node:fs';
 import { IntegrationsProvider } from '../src/integrations/IntegrationsContext.tsx';
 import { NotPluggedIn } from '../src/integrations/NotPluggedIn.tsx';
@@ -151,13 +153,20 @@ describe('the client header and tabs', () => {
   const header = (props: Record<string, unknown> = {}) =>
     renderToStaticMarkup(<SyncProvider><AppHeader companyName="Summit Roofing" userEmail="mike@summit.example" current="settings" {...props} /></SyncProvider>);
 
-  test('shows the company, the person, the Sync button and the account menu', () => {
+  test('is light: the company, a small Sync icon, and an account button with just the initial', () => {
     const html = header();
     assert.match(html, /Summit Roofing/);
-    assert.match(html, /mike@summit\.example/);
     assert.match(html, /aria-label="Account menu"/);
     assert.match(html, /aria-label="Sync everything now"/);
-    assert.match(html, /Synced just now/);
+    assert.match(html, /title="Synced just now\. Press to sync now\."/, 'the time is in the tooltip');
+    assert.doesNotMatch(html, />Synced just now</, 'no long text crowding the bar');
+    assert.doesNotMatch(html, /mike@summit\.example/, 'the email is not in the bar');
+    assert.match(html, />M</, 'the initial is');
+  });
+
+  test('the email is in the menu when it is opened', () => {
+    const html = renderToStaticMarkup(<SyncProvider><AppHeader companyName="S" userEmail="mike@summit.example" current="settings" initialOpen /></SyncProvider>);
+    assert.match(html.slice(html.indexOf('menu-panel')), /mike@summit\.example/);
   });
 
   test('the pages are tabs on a computer AND a bar along the bottom on a phone', () => {
@@ -1127,5 +1136,110 @@ describe('the client pages use the one main Sync, not their own refresh', () => 
     for (const [name, current] of [['QueuePage', 'dashboard'], ['ContactsPage', 'contacts'], ['SettingsPage', 'settings'], ['SetupPage', 'setup'], ['RegistrationPage', 'registration']]) {
       assert.match(page(name), new RegExp(`current="${current}"`), name);
     }
+  });
+});
+
+
+describe('the chart on a phone', () => {
+  const row = (daysAgo: number, booked: boolean) => ({
+    status: 'following_up', missed_call_at: new Date(Date.now() - daysAgo * 86400000).toISOString(), created_at: new Date(Date.now() - daysAgo * 86400000).toISOString(),
+    appointments: booked ? [{ status: 'scheduled' }] : [],
+  });
+  const rows = [row(0, true), row(0, false), row(1, false), row(3, true), row(9, false), row(20, true)];
+
+  test('the numbers lead, and the period is stated in words', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart(rows, '30d', 'America/Chicago')} />);
+    assert.match(html, />Missed calls and bookings</);
+    assert.match(html, /<span[^>]*text-3xl[^>]*>6<\/span><span[^>]*>missed</);
+    assert.match(html, /<span[^>]*text-3xl[^>]*>3<\/span><span[^>]*>booked</);
+    assert.match(html, />Last 30 days, by day</);
+    assert.match(html, />Missed</);
+    assert.match(html, />Booked</);
+  });
+
+  test('the last date label is pinned to the right edge, so it can never be cut off', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart(rows, '30d', 'America/Chicago')} />);
+    assert.match(html, /<span class="absolute[^"]*right-0[^"]*">Today<\/span>/);
+    assert.doesNotMatch(html, /-translate-x-1\/2[^"]*">Today</, 'not centered under the last bar');
+    assert.equal((html.match(/>Today</g) ?? []).length, 1);
+  });
+
+  test('a label near the left edge leans in, and the middle ones stay centered', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart(rows, '30d', 'America/Chicago')} />);
+    assert.match(html, /<span class="absolute[^"]*left-0[^"]*">[A-Z][a-z]{2} \d+<\/span>/);
+    assert.match(html, /left-1\/2 -translate-x-1\/2[^"]*">[A-Z][a-z]{2} \d+</);
+  });
+
+  test('24 hours ends with "Now" at the edge', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart([row(0, false)], '24h', 'America/Chicago')} />);
+    assert.match(html, /right-0[^"]*">Now<\/span>/);
+    assert.match(html, />Last 24 hours, by hour</);
+  });
+
+  test('7 days shows every weekday', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart(rows, '7d', 'America/Chicago')} />);
+    assert.match(html, />Last 7 days, by day</);
+    assert.equal((html.match(/>(Mon|Tue|Wed|Thu|Fri|Sat|Sun)<\/span>/g) ?? []).length, 7);
+  });
+
+  test('every bar can be pressed, with a full description for screen readers', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart(rows, '7d', 'America/Chicago')} />);
+    assert.equal((html.match(/aria-label="[^"]*: \d+ missed, \d+ booked"/g) ?? []).length, 7);
+    assert.match(html, /class="sr-only"/);
+  });
+
+  test('nothing to show says so, without an empty chart', () => {
+    const html = renderToStaticMarkup(<OverviewChart chart={buildChart([], '30d', 'America/Chicago')} />);
+    assert.match(html, /No missed calls in this period/);
+    assert.doesNotMatch(html, /Bars by period/);
+  });
+});
+
+describe('the conversation header', () => {
+  const open = (id: string, extra: Partial<React.ComponentProps<typeof DashboardBody>> = {}) => render({ selectedLeadId: id, onChangeType: async () => null, onChangeStatus: async () => null, ...extra });
+  const card = (html: string) => html.slice(html.indexOf('aria-label="Contact"'), html.indexOf('aria-label="What we know"') > 0 ? html.indexOf('aria-label="What we know"') : undefined);
+
+  test('a contact card: initials, the name once, the job and number, and where they are', () => {
+    const html = open('em');
+    const c = card(html);
+    assert.match(c, />MB</, 'initials avatar');
+    assert.equal((html.match(/>Marcus Brooks</g) ?? []).length >= 1, true);
+    assert.match(c, /<h3[^>]*>Marcus Brooks<\/h3>/);
+    assert.match(c, /Not specified/);
+    assert.match(c, /\(214\) 555-0101/);
+    assert.match(c, /1 A St, Dallas/);
+  });
+
+  test('Call and Directions are real buttons', () => {
+    const c = card(open('em'));
+    assert.match(c, /<a href="tel:[^"]*"[^>]*>[\s\S]*?Call<\/a>/);
+    assert.match(c, /<a href="https:\/\/[^"]*"[^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>[\s\S]*?Directions<\/a>/);
+  });
+
+  test('no phone, no Call button, and no address, no Directions', () => {
+    const noPhone = render({ selectedLeadId: 'x1', leads: [{ ...base, id: 'x1', name: 'No Phone', phone: '' }] });
+    assert.doesNotMatch(card(noPhone), />Call</);
+    const noAddr = render({ selectedLeadId: 'x2', leads: [{ ...base, id: 'x2', name: 'No Address', address: '' }] });
+    assert.doesNotMatch(card(noAddr), />Directions</);
+    assert.match(card(noAddr), />Call</);
+  });
+
+  test('the inspection time is a gold pill with a calendar, only when there is one', () => {
+    const withTime = render({ selectedLeadId: 'x3', leads: [{ ...base, id: 'x3', name: 'Booked Person', scheduledTime: 'Tue, Oct 21 · 2:00 PM' }] });
+    assert.match(card(withTime), /rounded-full[^>]*text-\[#ffc174\][^>]*>[\s\S]*?Tue, Oct 21 · 2:00 PM/);
+    assert.doesNotMatch(card(open('em')), /rounded-full border border-\[#ffc174\]\/30/);
+  });
+
+  test('the controls sit at the bottom of the card, and the phone bar is just Back and the urgency', () => {
+    const html = open('pc');
+    assert.match(card(html), /Who is this\? Currently Past client/);
+    const bar = html.slice(html.lastIndexOf('sticky top-0 z-30'), html.indexOf('aria-label="Contact"'));
+    assert.match(bar, /aria-label="Back to queue"/);
+    assert.doesNotMatch(bar, /Dana Ruiz/, 'the name is in the card, not repeated in the bar');
+  });
+
+  test('the urgency badge is in the card on a computer, and in the bar on a phone', () => {
+    const html = open('em');
+    assert.equal((html.match(/>EMERGENCY</g) ?? []).length >= 2, true);
   });
 });

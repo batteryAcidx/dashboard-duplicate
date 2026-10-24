@@ -1,5 +1,7 @@
 export type WindowKey = '24h' | '7d' | '30d';
 
+export type LabelAlign = 'start' | 'center' | 'end';
+
 export interface ChartBucket {
   key: string;
   label: string;
@@ -7,6 +9,10 @@ export interface ChartBucket {
   captured: number;
   booked: number;
   showLabel: boolean;
+  /** where the label sits under its bar: bars at the edges align their label inward so it is never cut off */
+  align: LabelAlign;
+  /** the hour of the day, for hourly buckets */
+  hour?: number;
 }
 
 export interface ChartData {
@@ -49,6 +55,26 @@ const dateOfKey = (key: string) => {
   return new Date(Date.UTC(y, m - 1, d, 12));
 };
 
+/**
+ * Decides which bars get a label under them, and which way each label leans.
+ *  - the last bar is always labelled ("Now" or "Today") and leans left, so it ends at the edge instead of hanging off it
+ *  - a label near the left edge leans right, for the same reason
+ *  - 30 days: one label a week, counting back from today. 24 hours: every 6th hour, but never crowding "Now".
+ *  - 7 days: every weekday fits, so all are shown, centered
+ */
+export function applyLabelPlan(buckets: ChartBucket[], unit: 'hour' | 'day', windowKey: WindowKey): void {
+  const n = buckets.length;
+  const edge = n <= 7 ? 0 : Math.ceil(n * 0.08);
+  buckets.forEach((b, i) => {
+    const fromEnd = n - 1 - i;
+    if (unit === 'hour') b.showLabel = fromEnd === 0 || ((b.hour ?? -1) % 6 === 0 && fromEnd >= 3);
+    else if (windowKey === '7d') b.showLabel = true;
+    else b.showLabel = fromEnd % 7 === 0;
+    if (fromEnd === 0 && windowKey !== '7d') b.label = unit === 'hour' ? 'Now' : 'Today';
+    b.align = edge > 0 && i < edge ? 'start' : edge > 0 && i > n - 1 - edge ? 'end' : 'center';
+  });
+}
+
 export function buildChart(rows: ChartRow[], windowKey: WindowKey, tz: string): ChartData {
   const now = Date.now();
   const unit: 'hour' | 'day' = windowKey === '24h' ? 'hour' : 'day';
@@ -79,7 +105,9 @@ export function buildChart(rows: ChartRow[], windowKey: WindowKey, tz: string): 
         title: `${weekday} ${hour12(hour)}`,
         captured: 0,
         booked: 0,
-        showLabel: hour % 6 === 0,
+        showLabel: false,
+        align: 'center',
+        hour,
       });
     });
   } else {
@@ -96,7 +124,8 @@ export function buildChart(rows: ChartRow[], windowKey: WindowKey, tz: string): 
         title: `${weekday}, ${md}`,
         captured: 0,
         booked: 0,
-        showLabel: n === 7 ? true : i % 6 === 0,
+        showLabel: false,
+        align: 'center',
       });
     }
   }
@@ -110,6 +139,8 @@ export function buildChart(rows: ChartRow[], windowKey: WindowKey, tz: string): 
     b.captured += 1;
     if (r.status !== 'lost' && r.appointments.some((a) => a.status !== 'cancelled')) b.booked += 1;
   }
+
+  applyLabelPlan(buckets, unit, windowKey);
 
   const max = buckets.reduce((m, b) => Math.max(m, b.captured), 0);
   let top = Math.max(2, max);

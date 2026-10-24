@@ -1,12 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  Paperclip,
-  Calendar,
-  Image as ImageIcon,
-  PhoneMissed,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { Calendar, CalendarCheck, ChevronLeft, ChevronRight, Image as ImageIcon, MapPin, Paperclip, Phone, PhoneMissed } from 'lucide-react';
+import { initialsOf } from '../domain';
 import { LeadStatusControl, LeadStatus, STATUS_LABEL } from './LeadStatusControl';
 import { OverviewChart } from './OverviewChart';
 import { ContactTypeControl } from './ContactTypeControl';
@@ -361,8 +355,8 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                 <div className={`flex min-h-0 flex-col justify-start lg:col-span-7 ${mobileView === 'list' ? 'hidden lg:flex' : 'flex'}`}>
                   {selectedLead ? (
                     <div className="w-full">
-                      {/* phones: a slim sticky bar with Back and the name */}
-                      <div className="sticky top-0 z-30 -mx-5 flex items-center gap-2 border-b border-white/[0.06] bg-[#0c101d]/95 px-5 py-1 backdrop-blur sm:-mx-8 sm:px-8 lg:hidden">
+                      {/* phones: a slim sticky bar with just Back and the urgency (the name is in the card below) */}
+                      <div className="sticky top-0 z-30 -mx-5 flex items-center justify-between gap-2 border-b border-white/[0.06] bg-[#0c101d]/95 px-5 py-1 backdrop-blur sm:-mx-8 sm:px-8 lg:hidden">
                         <button
                           type="button"
                           onClick={handleBackToQueue}
@@ -372,51 +366,72 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                           <ChevronLeft className="h-5 w-5 text-[#ffc174]" />
                           <span>Back</span>
                         </button>
-                        <span className="min-w-0 truncate font-display text-base font-bold tracking-tight text-slate-100">{selectedLead.name}</span>
                         <UrgencyBadge urgency={urgencyOf(selectedLead)} size="phone" />
                       </div>
 
-                      <div className="mb-6 border-b border-white/[0.06] pb-6 pt-5 lg:pt-0">
-                        <div className="space-y-3">
-                          {/* desktop: name and badge */}
-                          <div className="hidden flex-wrap items-center gap-3 lg:flex">
-                            <h3 className="font-display text-2xl font-bold tracking-tight text-slate-100">{selectedLead.name}</h3>
-                            <UrgencyBadge urgency={urgencyOf(selectedLead)} size="header" />
+                      {/* the contact: who, how to reach them, when we are going, and where it stands */}
+                      <section aria-label="Contact" className="mb-6 mt-5 rounded-2xl border border-white/[0.07] bg-[#0f1424] p-5 sm:p-6 lg:mt-0">
+                        <div className="flex items-start gap-4">
+                          <div
+                            aria-hidden="true"
+                            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/[0.1] bg-[#1b2438] font-display text-lg font-bold text-[#ffc174]"
+                          >
+                            {initialsOf(selectedLead.name)}
                           </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                              <h3 className="min-w-0 break-words font-display text-2xl font-bold tracking-tight text-slate-100">{selectedLead.name}</h3>
+                              <span className="hidden lg:inline-flex">
+                                <UrgencyBadge urgency={urgencyOf(selectedLead)} size="header" />
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[15px] text-slate-400">
+                              {selectedLead.insurance}
+                              {selectedLead.phone && <span className="font-data text-slate-500"> · {selectedLead.phone}</span>}
+                            </p>
+                            {hasAddress && (
+                              <p className="mt-0.5 flex items-start gap-1.5 text-sm text-slate-500">
+                                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                <span className="min-w-0 break-words">{selectedLead.address}</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
 
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] leading-relaxed text-slate-300 lg:text-sm">
-                            {selectedLead.phone ? (
+                        {selectedLead.scheduledTime && (
+                          <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#ffc174]/30 bg-[#ffc174]/10 px-4 py-2 text-sm font-semibold text-[#ffc174]">
+                            <CalendarCheck className="h-4 w-4" aria-hidden="true" />
+                            {selectedLead.scheduledTime}
+                          </div>
+                        )}
+
+                        {(selectedLead.phone || hasAddress) && (
+                          <div className="mt-5 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
+                            {selectedLead.phone && (
                               <a
                                 href={telHref(selectedLead.phone)}
-                                className="inline-block py-1 font-data font-medium text-slate-100 underline decoration-[#ffc174]/40 underline-offset-4 lg:no-underline"
+                                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#f59e0b] px-6 font-display text-sm font-bold text-[#150f05] transition-colors hover:bg-[#fbbf24]"
                               >
-                                {selectedLead.phone}
+                                <Phone className="h-4 w-4" aria-hidden="true" />
+                                Call
                               </a>
-                            ) : (
-                              <span className="text-slate-500">No phone</span>
                             )}
-                            <span className="hidden h-1 w-1 shrink-0 rounded-full bg-slate-600 sm:inline-block" aria-hidden="true" />
-                            <span className="text-slate-300">{selectedLead.insurance}</span>
-                            <span className="hidden h-1 w-1 shrink-0 rounded-full bg-slate-600 sm:inline-block" aria-hidden="true" />
-                            {hasAddress ? (
+                            {hasAddress && (
                               <a
                                 href={mapsHref(selectedLead.address)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="block w-full py-1 text-slate-300 underline decoration-[#ffc174]/40 underline-offset-4 sm:inline sm:w-auto sm:py-0 lg:text-slate-400 lg:no-underline"
+                                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/[0.1] bg-white/[0.04] px-6 font-display text-sm font-bold text-slate-200 transition-colors hover:bg-white/[0.08]"
                               >
-                                {selectedLead.address}
+                                <MapPin className="h-4 w-4" aria-hidden="true" />
+                                Directions
                               </a>
-                            ) : (
-                              <span className="block w-full text-slate-500 sm:inline sm:w-auto">{selectedLead.address}</span>
                             )}
                           </div>
+                        )}
 
-                          {selectedLead.scheduledTime && (
-                            <div className="pt-1 text-[15px] font-semibold text-[#ffc174] lg:text-sm">{selectedLead.scheduledTime}</div>
-                          )}
-
-                          <div className="flex flex-wrap items-center gap-2.5 pt-3">
+                        {(onChangeType || onChangeStatus) && (
+                          <div className="mt-5 flex flex-wrap items-center gap-2.5 border-t border-white/[0.06] pt-5">
                             {onChangeType && (
                               <ContactTypeControl
                                 key={`type-${selectedLead.id}`}
@@ -436,8 +451,8 @@ export const DashboardBody: React.FC<DashboardBodyProps> = ({
                               />
                             )}
                           </div>
-                        </div>
-                      </div>
+                        )}
+                      </section>
 
                       <LeadDetailsCard
                         rows={selectedLead.details ?? []}

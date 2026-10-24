@@ -77,7 +77,7 @@ export const AppHeader: React.FC<Props> = ({ companyName, userEmail, current, is
         </div>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-3">
-          <SyncIndicator />
+          <SyncIndicator compact />
           <div className="relative" ref={ref}>
             <button
               type="button"
@@ -89,12 +89,11 @@ export const AppHeader: React.FC<Props> = ({ companyName, userEmail, current, is
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/[0.1] bg-[#1b2438] text-xs font-bold text-[#ffc174]">
                 {(userEmail || 'U').charAt(0).toUpperCase()}
               </span>
-              <span className="hidden max-w-[180px] truncate lg:inline">{userEmail}</span>
               <ChevronDown className="h-4 w-4 text-slate-500" />
             </button>
             {open && (
               <div className="menu-panel absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0f1424] py-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
-                <div className="truncate px-4 pb-2 pt-2.5 text-xs text-slate-500 lg:hidden">{userEmail}</div>
+                <div className="truncate px-4 pb-2 pt-2.5 text-xs text-slate-500">{userEmail}</div>
                 {ownerMenu(Boolean(isAdmin)).map((i) => (
                   <button key={i.key} type="button" onClick={() => go(i.path)} className={itemCls}>
                     <span className={i.accent ? 'text-[#ffc174]' : undefined}>{i.label}</span>
