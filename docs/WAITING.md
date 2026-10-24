@@ -64,7 +64,7 @@ Some steps depend on someone else. Timings come from the services' own pages and
 - **Who:** You
 - **How long:** A decision, not a wait
 - **It blocks:** Automatic checking that forwarding works. Nothing else.
-- **Meanwhile:** It is set up and marked verified by hand on the Twilio tab. The three options are on the Integrations page.
+- **Meanwhile:** It is set up and marked verified by hand on the Twilio tab. The three options are in the Wiki.
 
 ### Supabase paid plan before the first paying client
 

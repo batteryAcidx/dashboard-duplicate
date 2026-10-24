@@ -22,7 +22,7 @@ domain/        Pure rules and types. No React, no network, no browser. Easy to t
 api/           The ONLY place that talks to Supabase. Screens call api.adminApi.billing.get(...) and nothing else.
 lib/           Small helpers: the one sync, settings kept in the browser, the two doors to the environment.
 components/    Shared pieces of screen (buttons, cards, headers). They get their data through props.
-integrations/  The pluggable services: catalog, guides, the "is it plugged in?" check, the Integrations page.
+integrations/  The pluggable services: catalog, guides, the "is it plugged in?" check, the Integrations and Wiki pages.
 features/      Screens, grouped by area (features/admin/clients, /tabs, /shell, /settings, ...).
 pages/         One address = one screen. Thin: they decide what to show, features do the showing.
 ```

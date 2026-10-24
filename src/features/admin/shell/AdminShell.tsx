@@ -4,7 +4,7 @@ import { IntegrationsProvider } from '../../../integrations';
 import { SyncProvider } from '../../../lib/sync';
 import { SyncIndicator } from '../../../components/SyncIndicator';
 
-export type AdminSection = 'clients' | 'territories' | 'integrations' | 'settings';
+export type AdminSection = 'clients' | 'territories' | 'integrations' | 'settings' | 'wiki';
 
 const NAV: { key: AdminSection; label: string; path: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { key: 'clients', label: 'Clients', path: '/admin', Icon: Users },
@@ -127,7 +127,21 @@ export const AdminShell: React.FC<Props> = ({ section, userEmail, onNavigate, on
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-5 pb-32 sm:px-8 md:pb-24">{children}</main>
+      <main className="mx-auto max-w-6xl px-5 pb-16 sm:px-8">{children}</main>
+
+      <footer className="mx-auto max-w-6xl border-t border-white/[0.06] px-5 pb-28 pt-8 text-sm sm:px-8 md:pb-12">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-slate-500">
+          <button
+            type="button"
+            onClick={() => onNavigate('/admin/wiki')}
+            aria-current={section === 'wiki' ? 'page' : undefined}
+            className={`cursor-pointer font-semibold transition-colors hover:text-[#ffc174] ${section === 'wiki' ? 'text-[#ffc174]' : 'text-slate-400'}`}
+          >
+            Wiki: set-up guides and what you are waiting for
+          </button>
+          <span>WedgeScale admin</span>
+        </div>
+      </footer>
 
       {/* phones: the sections live at the bottom, where a thumb can reach */}
       <nav

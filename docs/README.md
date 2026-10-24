@@ -2,6 +2,7 @@
 
 | I want to... | Read |
 |---|---|
+| Know what to do first, in order | [START-HERE.md](START-HERE.md) |
 | Understand how the code is organised, and change it safely | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Run the database scripts, in the right order | [RUNNING-THE-SQL.md](RUNNING-THE-SQL.md) |
 | Take payments | [SETUP-STRIPE.md](SETUP-STRIPE.md) |
@@ -11,7 +12,7 @@
 | Decide how missed calls reach us | [SETUP-CALL-FORWARDING.md](SETUP-CALL-FORWARDING.md) |
 | See what is blocked on someone else, and how long it takes | [WAITING.md](WAITING.md) |
 
-The same guides are inside the admin, on the **Integrations** page, with copy buttons, your real addresses filled in, and tick boxes that remember your place.
+The same guides are inside the admin, in the **Wiki** (the link in the footer), with copy buttons, your real addresses filled in, and tick boxes that remember your place. The **Integrations** page shows which services are plugged in.
 
 ## The order to do things in
 

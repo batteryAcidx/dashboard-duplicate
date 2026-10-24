@@ -8,7 +8,7 @@ import { ClientListView } from '../features/admin/clients/ClientListView';
 import { NewClientView } from '../features/admin/clients/NewClientView';
 import { ClientDetailView } from '../features/admin/clients/ClientDetailView';
 import { TerritoriesView } from '../features/admin/territories/TerritoriesView';
-import { IntegrationsPage } from '../integrations';
+import { IntegrationsPage, WikiPage } from '../integrations';
 
 interface AdminPageProps {
   onNavigate?: (path: string) => void;
@@ -30,7 +30,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onSignOut, use
   // not an admin: look exactly like a page that does not exist
   if (denied) return <NotFoundPage onNavigate={onNavigate} />;
 
-  const section = accountId === 'territories' ? 'territories' : accountId === 'settings' ? 'settings' : accountId === 'integrations' ? 'integrations' : 'clients';
+  const section = accountId === 'territories' ? 'territories' : accountId === 'settings' ? 'settings' : accountId === 'integrations' ? 'integrations' : accountId === 'wiki' ? 'wiki' : 'clients';
   const isNew = accountId === 'new';
 
   // Everything, including the Clients / Territories / Settings navigation, sits INSIDE the gate.
@@ -40,8 +40,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onSignOut, use
       <AdminShell section={section} userEmail={userEmail} onNavigate={goto} onSignOut={onSignOut}>
         {section === 'territories' ? (
           <TerritoriesView goto={goto} onDenied={handleDenied} />
+        ) : section === 'wiki' ? (
+          <WikiPage />
         ) : section === 'integrations' ? (
-          <IntegrationsPage />
+          <IntegrationsPage goto={goto} />
         ) : section === 'settings' ? (
           <AdminSettings userEmail={userEmail} onSignOut={onSignOut} />
         ) : isNew ? (

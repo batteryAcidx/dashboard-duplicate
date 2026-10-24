@@ -40,6 +40,8 @@ If a row is `false`, run that script and everything after it that is `false`, in
 
 ## Things to switch on first
 
-- **Vault** (Database, Extensions): needed to store the Twilio token, the calendar token and the EIN encrypted. Without it
-  the checks say `SKIP` and those features cannot save a secret.
+- **Vault**: stores the Twilio token, the calendar token and the EIN encrypted. It is normally already on. Check with
+  `select to_regclass('vault.secrets') is not null as vault_works;`. If it says false, run
+  `create extension if not exists supabase_vault with schema vault;`. Without it the checks say `SKIP` and those
+  features cannot save a secret.
 - **pg_cron and pg_net** (Database, Extensions): only for the automatic calendar sync. See `SETUP-GOOGLE-CALENDAR.md`.

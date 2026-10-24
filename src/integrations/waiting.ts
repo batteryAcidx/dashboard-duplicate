@@ -70,7 +70,7 @@ export const WAITING: WaitItem[] = [
     id: 'forwarding', kind: 'decide', title: 'How missed calls reach us (call forwarding)', who: 'You',
     typical: 'A decision, not a wait',
     blocks: 'Automatic checking that forwarding works. Nothing else.',
-    meanwhile: 'It is set up and marked verified by hand on the Twilio tab. The three options are on the Integrations page.',
+    meanwhile: 'It is set up and marked verified by hand on the Twilio tab. The three options are in the Wiki.',
   },
   {
     id: 'supabase-pro', kind: 'decide', title: 'Supabase paid plan before the first paying client', who: 'You',

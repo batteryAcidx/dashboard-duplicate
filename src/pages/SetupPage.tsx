@@ -5,6 +5,7 @@ import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 import { AppHeader } from '../components/AppHeader';
 import { SetupStepCard } from '../components/SetupStepCard';
+import { SetupNeeds } from '../components/SetupNeeds';
 import type { ClientStep } from '../domain/index';
 import { Notice } from '../components/ui';
 import { submitErrorText } from '../domain/setup';
@@ -117,7 +118,6 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
   const done = steps.filter((s) => s.status === 'done').length;
   const percent = total > 0 ? Math.round((done / total) * 100) : 0;
   const isLive = accountStatus === 'live' || (total > 0 && done === total);
-  const waiting = steps.filter((s) => s.status === 'waiting_on_you');
 
   return (
     <div className="min-h-screen w-full bg-[#090e1c] font-body text-[#dee1f7]">
@@ -187,21 +187,7 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
               </div>
             )}
 
-            {!isLive && waiting.length > 0 && (
-              <div className="mb-8 rounded-2xl border border-[#f59e0b]/35 bg-[#f59e0b]/[0.06] p-6">
-                <p className="mb-3 text-sm font-semibold text-[#ffc174]">
-                  {waiting.length === 1 ? 'We need one thing from you' : `We need ${waiting.length} things from you`}
-                </p>
-                <ul className="space-y-2.5">
-                  {waiting.map((s) => (
-                    <li key={s.id} className="text-[15px] leading-relaxed text-slate-100">
-                      <span className="font-display font-bold">{s.title}.</span> {s.note && <span className="text-slate-300">{s.note}</span>}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-4 text-[13px] text-slate-400">Open a step below to send it here, or just reply to our email.</p>
-              </div>
-            )}
+            {!isLive && <SetupNeeds steps={steps} />}
 
             <ol className="space-y-4">
               {steps.map((s) => (

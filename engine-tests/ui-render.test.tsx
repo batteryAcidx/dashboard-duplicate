@@ -27,6 +27,8 @@ import { INFO_PRESETS } from '../src/domain/setup.ts';
 import { RegistrationFormView } from '../src/features/registration/RegistrationFormView.tsx';
 import { RegistrationCard } from '../src/features/admin/tabs/RegistrationCard.tsx';
 import { IntegrationsPage } from '../src/integrations/IntegrationsPage.tsx';
+import { WikiPage } from '../src/integrations/WikiPage.tsx';
+import { SetupNeeds } from '../src/components/SetupNeeds.tsx';
 import { IntegrationsProvider } from '../src/integrations/IntegrationsContext.tsx';
 import { NotPluggedIn } from '../src/integrations/NotPluggedIn.tsx';
 import { GuideView } from '../src/integrations/GuideView.tsx';
@@ -589,24 +591,35 @@ describe('admin: setup tab', () => {
     assert.match(html, />What the client sent</);
     assert.match(html, /Summit Roofing LLC/);
     assert.match(html, />Copy into business info</);
-    assert.match(html, />Save step</);
+    assert.match(html, />Save changes</);
     assert.match(html, /Waiting on client/);
     assert.equal((html.match(/aria-expanded="true"/g) ?? []).length, 1, 'only one step is open at a time');
   });
 
-  test('each step has both tools: what we ask for, and the email', () => {
+  test('one form and ONE Save button: status, note and what the client is asked, together', () => {
     const html = renderToStaticMarkup(<SetupTab accountId="a" onSaveStep={async () => null} onDenied={() => {}} initial={overview} />);
-    assert.match(html, />What we ask for</);
-    assert.match(html, />Email the client</);
+    assert.equal((html.match(/>Save changes</g) ?? []).length, 1, 'exactly one Save button for the open step');
+    for (const gone of ['Save step', 'Save request', 'What we ask for<', 'role="tab"']) assert.ok(!html.includes(gone), `${gone} should no longer exist`);
+    assert.match(html, />Where this step stands</);
+    assert.match(html, />What we ask the client for</);
     assert.match(html, /It is always optional: they can also just reply to your email/);
     assert.match(html, />Pick a preset…|Replace with a preset…/);
-    assert.match(html, /A button on the client(&#x27;|')s step/);
+    assert.match(html, />Add a question</);
+    assert.match(html, /Stop asking the client for anything on this step/);
     assert.match(html, />Open our business registration form</);
     assert.match(html, />Connect Google Calendar</);
     assert.match(html, /Or a link of your own/);
     assert.match(html, /Must start with https:\/\//);
-    assert.match(html, />Add a question</);
-    assert.match(html, />Stop asking</);
+  });
+
+  test('nothing to save until something changes, and the email is a separate action underneath', () => {
+    const html = renderToStaticMarkup(<SetupTab accountId="a" onSaveStep={async () => null} onDenied={() => {}} initial={overview} />);
+    assert.match(html, /<button[^>]*disabled=""[^>]*>Save changes/);
+    assert.doesNotMatch(html, /You have unsaved changes/);
+    assert.doesNotMatch(html, />Discard changes</);
+    assert.match(html, />Email the client about this</);
+    assert.match(html, />Write an email</);
+    assert.doesNotMatch(html, />Send email</, 'the composer stays closed until you open it');
   });
 
   test('a client with no steps, and the loading state', () => {
@@ -788,8 +801,8 @@ const statuses = (over: Partial<IntegrationStatusMap> = {}): IntegrationStatusMa
 });
 const ctx = { backendUrl: 'https://abcd1234.supabase.co', appUrl: 'https://dashboard.wedgescale.com' };
 
-describe('integrations: the page', () => {
-  test('lists every service with where it stands, and what is missing', () => {
+describe('integrations: the status page', () => {
+  test('lists every service with where it stands, what is missing, and a way to the how-to', () => {
     const html = renderToStaticMarkup(
       <IntegrationsProvider initial={statuses({ stripe: ST('not_configured', ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']), google_calendar: ST('ready', [], ['CRON_SECRET']) })}>
         <IntegrationsPage />
@@ -802,11 +815,53 @@ describe('integrations: the page', () => {
     assert.match(html, />To decide</);
     assert.match(html, /Missing: <span[^>]*>STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET</);
     assert.match(html, /Recommended: <span[^>]*>CRON_SECRET</);
-    assert.match(html, /Nothing here is needed for the rest of the app to work/);
+    assert.match(html, /independent and optional/);
+    assert.equal((html.match(/>How to set it up</g) ?? []).length, 5);
   });
 
-  test('also lists what you are waiting for, grouped, with how long and what to do meanwhile', () => {
+  test('the how-to is NOT on this page any more: no steps, no copy boxes, no waiting list', () => {
     const html = renderToStaticMarkup(<IntegrationsProvider initial={statuses()}><IntegrationsPage /></IntegrationsProvider>);
+    assert.doesNotMatch(html, /steps ticked/);
+    assert.doesNotMatch(html, />Copy</);
+    assert.doesNotMatch(html, /What you are waiting for/);
+    assert.doesNotMatch(html, /role="checkbox"/);
+  });
+
+  test('if the status check cannot run, it says so instead of showing everything as off', () => {
+    const noProvider = renderToStaticMarkup(<IntegrationsPage />);
+    assert.match(noProvider, />Not checked</);
+    assert.doesNotMatch(noProvider, />Not plugged in</);
+  });
+});
+
+describe('the Wiki: for you, not for clients', () => {
+  const wiki = (topic?: string, st: IntegrationStatusMap = statuses()) =>
+    renderToStaticMarkup(<IntegrationsProvider initial={st}><WikiPage initialTopic={topic} /></IntegrationsProvider>);
+
+  test('opens on "Start here", with every topic one press away', () => {
+    const html = wiki();
+    assert.match(html, />Wiki</);
+    assert.match(html, /This is for you, not for clients/);
+    for (const t of ['Start here', 'Stripe', 'Google Calendar', 'Email sending', 'Twilio', 'Call forwarding', 'What you are waiting for']) assert.match(html, new RegExp(`>${t}<`));
+    assert.match(html, /href="#stripe"/);
+    assert.match(html, /aria-current="page"[^>]*>Start here</);
+    assert.match(html, /Update the app/);
+    assert.match(html, /Make a pretend client/);
+    assert.match(html, /When your first client signs/);
+  });
+
+  test('a guide topic shows that service\'s steps, with its status and your real addresses', () => {
+    const html = wiki('stripe', statuses({ stripe: ST('not_configured', ['STRIPE_SECRET_KEY']) }));
+    assert.match(html, />Stripe</);
+    assert.match(html, />Not plugged in</);
+    assert.match(html, /role="checkbox"/);
+    assert.match(html, /functions\/v1\/stripe-webhook/);
+    assert.match(html, /aria-current="page"[^>]*>Stripe</);
+    assert.doesNotMatch(html, /When your first client signs/);
+  });
+
+  test('the waiting list lives here now', () => {
+    const html = wiki('waiting');
     assert.match(html, />What you are waiting for</);
     for (const g of ['Do now', 'Waiting on someone else', 'To decide', 'Still to build']) assert.match(html, new RegExp(g));
     assert.match(html, /Twilio and the carriers approve a client/);
@@ -814,10 +869,51 @@ describe('integrations: the page', () => {
     assert.match(html, /Meanwhile/);
   });
 
-  test('if the status check cannot run, it says so instead of showing everything as off', () => {
-    const noProvider = renderToStaticMarkup(<IntegrationsPage />);
-    assert.match(noProvider, />Not checked</);
-    assert.doesNotMatch(noProvider, />Not plugged in</);
+  test('an unknown topic falls back to Start here', () => {
+    assert.match(wiki('nonsense'), /Make a pretend client/);
+  });
+
+  test('the footer link is on every admin page, and the Wiki is not in the main menu', () => {
+    const html = renderToStaticMarkup(<AdminShell section="clients" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
+    assert.match(html, /<footer/);
+    assert.match(html, />Wiki: set-up guides and what you are waiting for</);
+    const nav = html.slice(html.indexOf('aria-label="Admin sections"'), html.indexOf('</header>'));
+    assert.doesNotMatch(nav, /Wiki/);
+    const onWiki = renderToStaticMarkup(<AdminShell section="wiki" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
+    assert.match(onWiki, /aria-current="page"[^>]*>Wiki: set-up guides/);
+  });
+});
+
+describe('the client\'s "what we need from you"', () => {
+  const step = (over: Record<string, unknown>) => ({
+    id: 'n1', step_key: 'k', title: 'Carrier registration submitted', description: null, status: 'waiting_on_you' as const, note: null, sort_order: 1,
+    completed_at: null, info_prompt: null, info_fields: [], info_response: null, info_submitted_at: null, action: null, ...over,
+  });
+
+  test('says what we need, in the client\'s words, not the names of the steps', () => {
+    const html = renderToStaticMarkup(
+      <SetupNeeds steps={[
+        step({ action: 'registration_form' }),
+        step({ id: 'n2', title: 'Calendar connected', action: 'connect_calendar' }),
+      ]} />
+    );
+    assert.match(html, />What we need from you</);
+    assert.match(html, /We need your business details to have your carrier registration submitted\./);
+    assert.match(html, /We need you to connect your Google Calendar\./);
+    assert.doesNotMatch(html, /We need 2 things/);
+    assert.doesNotMatch(html, /Carrier registration submitted\./, 'the step name is not recited back');
+    assert.doesNotMatch(html, /Calendar connected\./);
+    assert.match(html, /Send it in the step below, or just reply to our email/);
+    assert.doesNotMatch(html, /Open a step below/);
+  });
+
+  test('shows nothing when nothing is needed', () => {
+    assert.equal(renderToStaticMarkup(<SetupNeeds steps={[step({ status: 'in_progress' })]} />), '');
+  });
+
+  test('the admin\'s note is added as extra detail, after the plain sentence', () => {
+    const html = renderToStaticMarkup(<SetupNeeds steps={[step({ action: 'registration_form', note: 'The legal name must match your IRS letter' })]} />);
+    assert.match(html, /to have your carrier registration submitted\. The legal name must match your IRS letter\./);
   });
 });
 

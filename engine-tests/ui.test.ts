@@ -13,6 +13,10 @@ import {
 /** presets are looked up by name, so adding a new one never breaks a test that wanted another */
 const PRESET = (id: string) => INFO_PRESETS.find((p) => p.id === id)!;
 import {
+  EMPTY_DRAFT, cleanDraft, draftAsks, draftFromStep, needLine, outcomePhrase, sameDraft, stepChanges, validateDraft,
+} from '../src/domain/setup.ts';
+import { START_HERE, WIKI_TOPICS, isWikiTopic } from '../src/integrations/wiki.ts';
+import {
   EMPTY_REGISTRATION, PATH_LABEL, REGISTRATION_STATUS, einDigits, errorCount, formFromSaved, formatEin, isHttpsLink, isPluggedIn, maskEin,
   registrationErrorText, registrationLocked, registrationPath, registrationPayload, validateRegistration,
 } from '../src/domain/index.ts';
@@ -704,5 +708,110 @@ describe('integrations: the catalog, the guides and the waiting list', () => {
     for (const k of Object.keys(KIND_LABEL) as (keyof typeof KIND_LABEL)[]) assert.ok(waitingByKind(k).length >= 1, k);
     for (const w of WAITING) assert.ok(w.title && w.who && w.typical && w.blocks && w.meanwhile, w.id);
     assert.ok(WAITING.some((w) => /Twilio/.test(w.title)) && WAITING.some((w) => /Google/.test(w.title)) && WAITING.some((w) => /Stripe/.test(w.title)));
+  });
+});
+
+
+describe('one Save button: knowing what changed on a step', () => {
+  const step = {
+    status: 'pending', note: null as string | null, info_prompt: 'We need details.', info_fields: [{ key: 'a', label: 'Name', type: 'text' as const }],
+    action: null as string | null, info_link: null as string | null, info_link_label: null as string | null,
+  };
+
+  test('an untouched step has nothing to save', () => {
+    const c = stepChanges(step, 'pending', '', draftFromStep(step));
+    assert.deepEqual(c, { statusOrNote: false, request: false, any: false });
+  });
+
+  test('changing only the status, or only the note, or only the request is each noticed on its own', () => {
+    const d = draftFromStep(step);
+    assert.deepEqual(stepChanges(step, 'done', '', d), { statusOrNote: true, request: false, any: true });
+    assert.deepEqual(stepChanges(step, 'pending', 'hello', d), { statusOrNote: true, request: false, any: true });
+    assert.deepEqual(stepChanges(step, 'pending', '', { ...d, prompt: 'Different.' }), { statusOrNote: false, request: true, any: true });
+  });
+
+  test('changing both is one change to save, not two', () => {
+    const d = draftFromStep(step);
+    const c = stepChanges(step, 'waiting_on_you', 'Please send it', { ...d, action: 'registration_form' });
+    assert.deepEqual(c, { statusOrNote: true, request: true, any: true });
+  });
+
+  test('typing a space, or toggling "required" off and on, is not a change', () => {
+    const d = draftFromStep(step);
+    assert.equal(sameDraft(d, { ...d, prompt: '  We need details.  ' }), true);
+    assert.equal(sameDraft(d, { ...d, fields: [{ ...d.fields[0], required: false }] }), true);
+    assert.equal(sameDraft(d, { ...d, fields: [{ ...d.fields[0], label: ' Name ' }] }), true);
+    assert.equal(sameDraft(d, { ...d, fields: [{ ...d.fields[0], required: true }] }), false);
+  });
+
+  test('a button text with no link does not count, and a draft that asks for nothing says so', () => {
+    assert.equal(cleanDraft({ ...EMPTY_DRAFT, linkLabel: 'Open it' }).linkLabel, '');
+    assert.equal(draftAsks(EMPTY_DRAFT), false);
+    assert.equal(draftAsks({ ...EMPTY_DRAFT, action: 'connect_calendar' }), true);
+    assert.equal(draftAsks({ ...EMPTY_DRAFT, link: 'https://x.co' }), true);
+  });
+
+  test('a draft cannot be saved with a bad question or an insecure link', () => {
+    assert.equal(validateDraft(draftFromStep(step)), null);
+    assert.match(validateDraft({ ...EMPTY_DRAFT, fields: [{ key: 'a', label: '', type: 'text' }] }) ?? '', /label/);
+    assert.match(validateDraft({ ...EMPTY_DRAFT, link: 'http://x.co' }) ?? '', /https/);
+    assert.equal(validateDraft({ ...EMPTY_DRAFT, link: 'https://x.co' }), null);
+  });
+
+  test('"Stop asking" is just an empty draft, saved with everything else', () => {
+    assert.equal(stepChanges(step, 'pending', '', EMPTY_DRAFT).request, true);
+    assert.equal(stepChanges({ ...step, info_prompt: null, info_fields: [] }, 'pending', '', EMPTY_DRAFT).request, false);
+  });
+});
+
+describe('what we tell the client we need', () => {
+  test('a step name that describes an outcome becomes "have your ... ..."', () => {
+    assert.equal(outcomePhrase('Carrier registration submitted'), 'have your carrier registration submitted');
+    assert.equal(outcomePhrase('Calendar connected'), 'have your calendar connected');
+    assert.equal(outcomePhrase('Your call forwarding verified'), 'have your call forwarding verified');
+    assert.equal(outcomePhrase('A2P brand approved'), 'have your A2P brand approved', 'acronyms keep their capitals');
+    assert.equal(outcomePhrase('Kickoff call'), null);
+    assert.equal(outcomePhrase('submitted'), null);
+  });
+
+  test('the registration step, as the client reads it', () => {
+    assert.equal(needLine({ title: 'Carrier registration submitted', action: 'registration_form' }), 'We need your business details to have your carrier registration submitted.');
+  });
+
+  test('connecting the calendar does not repeat itself', () => {
+    assert.equal(needLine({ title: 'Calendar connected', action: 'connect_calendar' }), 'We need you to connect your Google Calendar.');
+  });
+
+  test('a link, questions, or nothing special', () => {
+    assert.equal(needLine({ title: 'Insurance verified', info_link: 'https://f.co/x' }), 'We need you to fill in a short form to have your insurance verified.');
+    assert.equal(needLine({ title: 'Business profile confirmed', info_fields: [{}] }), 'We need a few details from you to have your business profile confirmed.');
+    assert.equal(needLine({ title: 'Phone line verified' }), 'We need a quick reply from you to have your phone line verified.');
+  });
+
+  test('a title that is not an outcome still reads sensibly', () => {
+    assert.equal(needLine({ title: 'Kickoff call' }), 'We need a quick reply from you to finish "Kickoff call".');
+    assert.equal(needLine({ title: 'Kickoff call', action: 'registration_form' }), 'We need your business details so we can file your carrier registration.');
+  });
+
+  test('the admin\'s note is added after, as a full sentence', () => {
+    assert.equal(
+      needLine({ title: 'Carrier registration submitted', action: 'registration_form', note: 'The legal name must match your IRS letter' }),
+      'We need your business details to have your carrier registration submitted. The legal name must match your IRS letter.',
+    );
+    assert.equal(needLine({ title: 'Calendar connected', action: 'connect_calendar', note: 'Use the work account!' }), 'We need you to connect your Google Calendar. Use the work account!');
+    assert.equal(needLine({ title: 'X', note: '   ' }), 'We need a quick reply from you to finish "X".');
+  });
+});
+
+describe('the Wiki content', () => {
+  test('every topic is real, "start" comes first, and every phase has something to do', () => {
+    assert.equal(WIKI_TOPICS[0].id, 'start');
+    assert.equal(isWikiTopic('stripe'), true);
+    assert.equal(isWikiTopic('waiting'), true);
+    assert.equal(isWikiTopic('nonsense'), false);
+    assert.ok(START_HERE.length >= 4);
+    for (const p of START_HERE) assert.ok(p.title && p.why && p.items.length >= 1, p.title);
+    // every guide has its own topic
+    for (const i of INTEGRATIONS) assert.equal(isWikiTopic(i.id), true, `${i.id} has no Wiki topic`);
   });
 });

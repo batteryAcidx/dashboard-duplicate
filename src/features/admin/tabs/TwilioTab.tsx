@@ -143,7 +143,7 @@ export const TwilioTab: React.FC<{ accountId: string; onDenied: () => void; init
           <Field id="tw-reg" label="Registration">
             <Select id="tw-reg" value={form.registration_status ?? 'not_submitted'} onChange={set('registration_status')} options={REG} />
           </Field>
-          <Field id="tw-fwd" label="Call forwarding" hint="Set by hand for now. How we do it for real is still to be decided: see Integrations.">
+          <Field id="tw-fwd" label="Call forwarding" hint="Set by hand for now. How we do it for real is still to be decided: see the Wiki.">
             <Select id="tw-fwd" value={form.forwarding_status ?? 'not_set'} onChange={set('forwarding_status')} options={FWD} />
           </Field>
         </div>

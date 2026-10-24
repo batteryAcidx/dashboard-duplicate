@@ -174,7 +174,7 @@ begin
       r := array_append(r, 'PASS: the EIN is stored encrypted, owners and admins only see the last 4, and revealing it is logged');
     exception when invalid_schema_name or undefined_table or undefined_function then
       reset role;
-      r := array_append(r, 'SKIP: Vault is not enabled (Database, Extensions), so EIN storage was not tested');
+      r := array_append(r, 'SKIP: Vault is not available (see docs/RUNNING-THE-SQL.md), so EIN storage was not tested');
     end;
 
     raise exception 'ROLLBACK_TESTS';

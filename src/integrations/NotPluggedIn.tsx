@@ -8,7 +8,7 @@ import type { IntegrationId } from '../domain';
 export const NotPluggedIn: React.FC<{ id: IntegrationId; goto?: (path: string) => void }> = ({ id, goto }) => {
   const info = integrationInfo(id);
   const { status } = useIntegration(id);
-  const open = () => (goto ? goto(`/admin/integrations#${id}`) : window.location.assign(`/admin/integrations#${id}`));
+  const open = () => (goto ? goto(`/admin/wiki#${id}`) : window.location.assign(`/admin/wiki#${id}`));
   return (
     <Card title={`${info.name} is not plugged in yet`} hint={info.tagline} action={<Chip>Off</Chip>}>
       <div className="space-y-5">

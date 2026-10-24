@@ -7,9 +7,10 @@ import { useIntegration } from '../../../integrations';
 import { useSynced, useSync } from '../../../lib/sync';
 import { adminErrorText, relativeTime } from '../../../domain/index';
 import {
-  FIELD_TYPES, INFO_PRESETS, STEP_ACTIONS, answersToRows, buildStepEmail, businessKeysIn, isHttpsLink, keyFromLabel, mailtoHref, mailtoTooLong, suggestPreset, validateFields,
+  EMPTY_DRAFT, FIELD_TYPES, INFO_PRESETS, STEP_ACTIONS, answersToRows, buildStepEmail, businessKeysIn, cleanDraft, draftAsks, draftFromStep, keyFromLabel, mailtoHref, mailtoTooLong,
+  stepChanges, suggestPreset, validateDraft,
 } from '../../../domain/setup';
-import type { FieldType, InfoField } from '../../../domain/setup';
+import type { FieldType, InfoField, RequestDraft } from '../../../domain/setup';
 import type { SetupEmail, SetupOverview, SetupStep, StepStatus } from '../../../domain/index';
 
 const STATUS: [StepStatus, string][] = [['pending', 'Up next'], ['in_progress', 'In progress'], ['waiting_on_you', 'Waiting on client'], ['done', 'Done']];
@@ -24,63 +25,18 @@ const uniqueKey = (label: string, taken: string[]): string => {
 
 /* ---------------------------------------------------------------- what we ask the client for */
 
-const RequestEditor: React.FC<{ accountId: string; step: SetupStep; onSaved: () => void; onDenied: () => void }> = ({ accountId, step, onSaved, onDenied }) => {
-  const [prompt, setPrompt] = useState(step.info_prompt ?? '');
-  const [fields, setFields] = useState<InfoField[]>(step.info_fields ?? []);
-  const [action, setAction] = useState<string | null>(step.action);
-  const [link, setLink] = useState(step.info_link ?? '');
-  const [linkLabel, setLinkLabel] = useState(step.info_link_label ?? '');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+/** Only the fields. It holds no state and has no Save button: the step card owns the one Save for everything. */
+const RequestForm: React.FC<{ step: SetupStep; draft: RequestDraft; onChange: (next: RequestDraft) => void }> = ({ step, draft, onChange }) => {
   const suggestion = suggestPreset(step);
   const google = useIntegration('google_calendar');
-
-  const touched = () => setSaved(false);
-  const asks = fields.length > 0 || action !== null || link.trim() !== '';
+  const asks = draftAsks(draft);
+  const set = (patch: Partial<RequestDraft>) => onChange({ ...draft, ...patch });
+  const setField = (i: number, patch: Partial<InfoField>) => set({ fields: draft.fields.map((f, n) => (n === i ? { ...f, ...patch } : f)) });
 
   const applyPreset = (id: string) => {
-    touched();
-    if (!id) {
-      setPrompt('');
-      setFields([]);
-      setAction(null);
-      return;
-    }
     const p = INFO_PRESETS.find((x) => x.id === id);
     if (!p) return;
-    setPrompt(p.prompt);
-    setFields(p.fields.map((f) => ({ ...f })));
-    setAction(p.action ?? null);
-  };
-
-  const setField = (i: number, patch: Partial<InfoField>) => {
-    touched();
-    setFields((fs) => fs.map((f, n) => (n === i ? { ...f, ...patch } : f)));
-  };
-
-  const save = async (clear = false) => {
-    const clean = clear ? [] : fields.map((f) => ({ ...f, label: f.label.trim(), options: f.type === 'select' ? (f.options ?? []).map((o) => o.trim()).filter(Boolean) : undefined }));
-    const problem = clear ? null : validateFields(clean);
-    if (problem) return setError(problem);
-    if (!clear && link.trim() && !isHttpsLink(link)) return setError('The link must start with https:// (a secure address).');
-    setBusy(true);
-    setError(null);
-    const r = await adminApi.setup.setRequest(accountId, step.step_key, { prompt: clear ? '' : prompt, fields: clean, action: clear ? null : action, link: clear ? null : link.trim() || null, linkLabel: clear ? null : linkLabel.trim() || null });
-    setBusy(false);
-    if (r.error) {
-      if (r.status === 403) return onDenied();
-      return setError(r.error.includes('bad_fields') ? 'Check the questions: each needs a label and a different name.' : adminErrorText(r.error));
-    }
-    if (clear) {
-      setPrompt('');
-      setFields([]);
-      setAction(null);
-      setLink('');
-      setLinkLabel('');
-    }
-    setSaved(true);
-    onSaved();
+    set({ prompt: p.prompt, fields: p.fields.map((f) => ({ ...f })), action: p.action ?? null });
   };
 
   return (
@@ -102,11 +58,11 @@ const RequestEditor: React.FC<{ accountId: string; step: SetupStep; onSaved: () 
       </Field>
 
       <Field id={`prompt-${step.id}`} label="What you tell the client">
-        <textarea id={`prompt-${step.id}`} rows={2} maxLength={600} value={prompt} onChange={(e) => { setPrompt(e.target.value); touched(); }} className={`${inputCls} h-auto py-3`} placeholder="One or two sentences" />
+        <textarea id={`prompt-${step.id}`} rows={2} maxLength={600} value={draft.prompt} onChange={(e) => set({ prompt: e.target.value })} className={`${inputCls} h-auto py-3`} placeholder="One or two sentences" />
       </Field>
 
       <div className="space-y-3">
-        {fields.map((f, i) => (
+        {draft.fields.map((f, i) => (
           <div key={f.key} className="space-y-3 rounded-xl border border-white/[0.06] bg-[#0a0f1d] p-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_180px]">
               <input
@@ -116,7 +72,7 @@ const RequestEditor: React.FC<{ accountId: string; step: SetupStep; onSaved: () 
                 placeholder="The question"
                 onChange={(e) => setField(i, { label: e.target.value })}
                 onBlur={() => {
-                  if (/^field_/.test(f.key) && f.label.trim()) setField(i, { key: uniqueKey(f.label, fields.filter((_, n) => n !== i).map((x) => x.key)) });
+                  if (/^field_/.test(f.key) && f.label.trim()) setField(i, { key: uniqueKey(f.label, draft.fields.filter((_, n) => n !== i).map((x) => x.key)) });
                 }}
                 className={inputCls}
               />
@@ -146,14 +102,14 @@ const RequestEditor: React.FC<{ accountId: string; step: SetupStep; onSaved: () 
                 <input type="checkbox" checked={Boolean(f.required)} onChange={(e) => setField(i, { required: e.target.checked })} className="h-4 w-4 accent-[#f59e0b]" />
                 Required to send this form
               </label>
-              <button type="button" onClick={() => { touched(); setFields((fs) => fs.filter((_, n) => n !== i)); }} className="cursor-pointer text-sm text-slate-500 transition-colors hover:text-red-400">
+              <button type="button" onClick={() => set({ fields: draft.fields.filter((_, n) => n !== i) })} className="cursor-pointer text-sm text-slate-500 transition-colors hover:text-red-400">
                 Remove
               </button>
             </div>
           </div>
         ))}
-        {fields.length < 8 && (
-          <Button tone="quiet" onClick={() => { touched(); setFields((fs) => [...fs, { key: `field_${fs.length + 1}_${Math.random().toString(36).slice(2, 5)}`, label: '', type: 'text' }]); }}>
+        {draft.fields.length < 8 && (
+          <Button tone="quiet" onClick={() => set({ fields: [...draft.fields, { key: `field_${draft.fields.length + 1}_${Math.random().toString(36).slice(2, 5)}`, label: '', type: 'text' }] })}>
             Add a question
           </Button>
         )}
@@ -165,7 +121,7 @@ const RequestEditor: React.FC<{ accountId: string; step: SetupStep; onSaved: () 
           <p className="mt-1.5 text-[13px] leading-relaxed text-slate-500">Optional. Sends them to our own forms, or to a link of yours.</p>
         </div>
         <Field id={`act-${step.id}`} label="Our built-in button">
-          <select id={`act-${step.id}`} value={action ?? ''} onChange={(e) => { touched(); setAction(e.target.value || null); }} style={{ colorScheme: 'dark' }} className={inputCls}>
+          <select id={`act-${step.id}`} value={draft.action ?? ''} onChange={(e) => set({ action: e.target.value || null })} style={{ colorScheme: 'dark' }} className={inputCls}>
             {STEP_ACTIONS.map(([v, l]) => (
               <option key={v} value={v}>{l}{v === 'connect_calendar' && !google.plugged ? ' (not plugged in yet)' : ''}</option>
             ))}
@@ -173,22 +129,19 @@ const RequestEditor: React.FC<{ accountId: string; step: SetupStep; onSaved: () 
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-[2fr_1fr]">
           <Field id={`lnk-${step.id}`} label="Or a link of your own" hint="Must start with https://">
-            <input id={`lnk-${step.id}`} type="url" value={link} maxLength={500} placeholder="https://" onChange={(e) => { touched(); setLink(e.target.value); }} className={inputCls} />
+            <input id={`lnk-${step.id}`} type="url" value={draft.link} maxLength={500} placeholder="https://" onChange={(e) => set({ link: e.target.value })} className={inputCls} />
           </Field>
           <Field id={`lbl-${step.id}`} label="Button text">
-            <input id={`lbl-${step.id}`} value={linkLabel} maxLength={60} placeholder="Open the form" onChange={(e) => { touched(); setLinkLabel(e.target.value); }} className={inputCls} />
+            <input id={`lbl-${step.id}`} value={draft.linkLabel} maxLength={60} placeholder="Open the form" onChange={(e) => set({ linkLabel: e.target.value })} className={inputCls} />
           </Field>
         </div>
       </div>
 
-      {error && <Notice tone="error">{error}</Notice>}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={() => save(false)} disabled={busy}>{busy ? 'Saving…' : 'Save request'}</Button>
-        {step.info_prompt || step.info_fields.length > 0 || step.action || step.info_link ? (
-          <Button tone="quiet" onClick={() => save(true)} disabled={busy}>Stop asking</Button>
-        ) : null}
-        {saved && <Notice tone="ok">Saved</Notice>}
-      </div>
+      {asks && (
+        <button type="button" onClick={() => onChange(EMPTY_DRAFT)} className="cursor-pointer text-sm text-slate-500 transition-colors hover:text-red-400">
+          Stop asking the client for anything on this step
+        </button>
+      )}
     </div>
   );
 };
@@ -248,7 +201,7 @@ const EmailComposer: React.FC<{
         <textarea id={`body-${step.id}`} rows={11} maxLength={5000} value={body} onChange={(e) => setBody(e.target.value)} className={`${inputCls} h-auto py-3 leading-relaxed`} />
       </Field>
 
-      {!email.plugged && <Notice tone="info">Sending from here is not plugged in yet, so use Open in my email app or Copy. The set-up guide is on the Integrations page.</Notice>}
+      {!email.plugged && <Notice tone="info">Sending from here is not plugged in yet, so use Open in my email app or Copy. The set-up guide is in the Wiki (footer link).</Notice>}
       {msg && <Notice tone={msg.ok ? 'ok' : 'error'}>{msg.text}</Notice>}
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={send} disabled={busy || !email.plugged || !to || !subject.trim() || !body.trim()}>{busy ? 'Sending…' : 'Send email'}</Button>
@@ -289,22 +242,56 @@ const StepCard: React.FC<{
 }> = ({ accountId, step, overview, signer, open, onToggle, onSaveStep, onChanged, onDenied }) => {
   const [status, setStatus] = useState<StepStatus>(step.status);
   const [note, setNote] = useState(step.note ?? '');
+  const [draft, setDraft] = useState<RequestDraft>(() => draftFromStep(step));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const [applied, setApplied] = useState<string | null>(null);
-  const [panel, setPanel] = useState<'request' | 'email'>('request');
-  const dirty = status !== step.status || note.trim() !== (step.note ?? '');
+  const [emailOpen, setEmailOpen] = useState(false);
+
+  const changes = stepChanges(step, status, note, draft);
   const asks = step.info_fields.length > 0 || step.action !== null || Boolean(step.info_link);
   const rows = answersToRows(step.info_fields, step.info_response);
   const copyable = businessKeysIn(step.info_response);
 
+  const edit = <T,>(setter: (v: T) => void) => (v: T) => {
+    setSaved(false);
+    setter(v);
+  };
+
+  /** One press saves both halves: the status and note, and what the client is asked. */
   const save = async () => {
+    const problem = validateDraft(draft);
+    if (problem) return setError(problem);
     setBusy(true);
     setError(null);
-    const err = await onSaveStep(step.step_key, status, note);
+    if (changes.statusOrNote) {
+      const err = await onSaveStep(step.step_key, status, note);
+      if (err) {
+        setBusy(false);
+        return setError(err);
+      }
+    }
+    if (changes.request) {
+      const c = cleanDraft(draft);
+      const r = await adminApi.setup.setRequest(accountId, step.step_key, { prompt: c.prompt, fields: c.fields, action: c.action, link: c.link || null, linkLabel: c.linkLabel || null });
+      if (r.error) {
+        setBusy(false);
+        if (r.status === 403) return onDenied();
+        return setError(r.error.includes('bad_fields') ? 'Check the questions: each needs a label and a different name.' : adminErrorText(r.error));
+      }
+    }
     setBusy(false);
-    if (err) return setError(err);
+    setSaved(true);
     onChanged();
+  };
+
+  const discard = () => {
+    setStatus(step.status);
+    setNote(step.note ?? '');
+    setDraft(draftFromStep(step));
+    setError(null);
+    setSaved(false);
   };
 
   const apply = async () => {
@@ -335,24 +322,6 @@ const StepCard: React.FC<{
 
       {open && (
         <div className="space-y-8 border-t border-white/[0.06] p-5 sm:p-6">
-          {/* status and the note the client sees */}
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-[210px_1fr]">
-              <Field id={`st-${step.id}`} label="Status">
-                <select id={`st-${step.id}`} value={status} onChange={(e) => setStatus(e.target.value as StepStatus)} style={{ colorScheme: 'dark' }} className={inputCls}>
-                  {STATUS.map(([v, l]) => (
-                    <option key={v} value={v}>{l}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field id={`nt-${step.id}`} label="Note the client sees">
-                <input id={`nt-${step.id}`} value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="Optional" className={inputCls} />
-              </Field>
-            </div>
-            {error && <Notice tone="error">{error}</Notice>}
-            <Button onClick={save} disabled={!dirty || busy}>{busy ? 'Saving…' : 'Save step'}</Button>
-          </div>
-
           {/* what the client sent */}
           {step.info_submitted_at && (
             <div className="space-y-4 rounded-xl border border-[#f59e0b]/25 bg-[#f59e0b]/[0.05] p-5">
@@ -381,26 +350,49 @@ const StepCard: React.FC<{
             </div>
           )}
 
-          {/* two tools: what we ask, and the email */}
-          <div>
-            <div role="tablist" className="mb-6 inline-flex rounded-xl border border-white/[0.07] bg-[#090d18] p-1">
-              {([['request', 'What we ask for'], ['email', 'Email the client']] as const).map(([k, l]) => (
-                <button
-                  key={k}
-                  type="button"
-                  role="tab"
-                  aria-selected={panel === k}
-                  onClick={() => setPanel(k)}
-                  className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${panel === k ? 'bg-[#161d30] text-[#ffc174]' : 'text-slate-400 hover:text-slate-200'}`}
-                >
-                  {l}
-                </button>
-              ))}
+          {/* ONE form: where the step stands, and what the client is asked. One Save at the bottom. */}
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <div className="text-sm font-semibold text-slate-100">Where this step stands</div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-[210px_1fr]">
+                <Field id={`st-${step.id}`} label="Status">
+                  <select id={`st-${step.id}`} value={status} onChange={(e) => edit(setStatus)(e.target.value as StepStatus)} style={{ colorScheme: 'dark' }} className={inputCls}>
+                    {STATUS.map(([v, l]) => (
+                      <option key={v} value={v}>{l}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field id={`nt-${step.id}`} label="Note the client sees" hint="Shown to them with what we need from them. Optional.">
+                  <input id={`nt-${step.id}`} value={note} maxLength={300} onChange={(e) => edit(setNote)(e.target.value)} placeholder="Optional" className={inputCls} />
+                </Field>
+              </div>
             </div>
-            {panel === 'request' ? (
-              <RequestEditor accountId={accountId} step={step} onSaved={onChanged} onDenied={onDenied} />
-            ) : (
-              <EmailComposer accountId={accountId} step={step} owner={overview.owner} emails={overview.emails} signer={signer} onSent={onChanged} />
+
+            <RequestForm step={step} draft={draft} onChange={edit(setDraft)} />
+
+            {error && <Notice tone="error">{error}</Notice>}
+            <div className="flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-6">
+              <Button onClick={save} disabled={!changes.any || busy}>{busy ? 'Saving…' : 'Save changes'}</Button>
+              {changes.any && !busy && <Button tone="quiet" onClick={discard}>Discard changes</Button>}
+              {changes.any && <span className="text-sm text-slate-400">You have unsaved changes.</span>}
+              {saved && !changes.any && <Notice tone="ok">Saved</Notice>}
+            </div>
+          </div>
+
+          {/* a separate action, not part of the form */}
+          <div className="space-y-5 border-t border-white/[0.06] pt-8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-100">Email the client about this</div>
+                <p className="mt-1 text-[13px] text-slate-500">Writes a first draft from this step. You can edit it before it goes.</p>
+              </div>
+              <Button tone="quiet" onClick={() => setEmailOpen((v) => !v)}>{emailOpen ? 'Close the email' : 'Write an email'}</Button>
+            </div>
+            {emailOpen && (
+              <>
+                {changes.any && <Notice tone="info">You have unsaved changes. Save first, so the email matches what the client will see.</Notice>}
+                <EmailComposer accountId={accountId} step={step} owner={overview.owner} emails={overview.emails} signer={signer} onSent={onChanged} />
+              </>
             )}
           </div>
         </div>

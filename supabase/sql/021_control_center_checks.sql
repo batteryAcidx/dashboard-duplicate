@@ -250,7 +250,7 @@ begin
       r := array_append(r, 'PASS: the Twilio token is stored encrypted and never shown again');
     exception when invalid_schema_name or undefined_table or undefined_function then
       reset role;
-      r := array_append(r, 'SKIP: Vault is not enabled (Database, Extensions), so token storage was not tested');
+      r := array_append(r, 'SKIP: Vault is not available (see docs/RUNNING-THE-SQL.md), so token storage was not tested');
     end;
 
     raise exception 'ROLLBACK_TESTS';
@@ -351,7 +351,7 @@ begin
       if public.engine_get_calendar_token(acct) is not null then raise exception 'the calendar token was not deleted'; end if;
       r := array_append(r, 'PASS: the calendar token is kept encrypted, read back, and fully deleted');
     exception when invalid_schema_name or undefined_table or undefined_function then
-      r := array_append(r, 'SKIP: Vault is not enabled (Database, Extensions), so token storage was not tested');
+      r := array_append(r, 'SKIP: Vault is not available (see docs/RUNNING-THE-SQL.md), so token storage was not tested');
     end;
 
     raise exception 'ROLLBACK_TESTS';

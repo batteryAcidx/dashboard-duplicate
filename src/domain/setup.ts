@@ -203,3 +203,105 @@ export function submitErrorText(message: string): string {
   if (m.includes('nothing_requested') || m.includes('step_not_found')) return 'This step is not asking for anything right now. Refresh and try again.';
   return 'We could not send that. Check your connection and try again, or just reply to our email.';
 }
+
+/* ---------------------------------------------------------------- one form, one Save button */
+
+/** Everything the admin decides about what a step asks the client for. */
+export interface RequestDraft {
+  prompt: string;
+  fields: InfoField[];
+  action: string | null;
+  link: string;
+  linkLabel: string;
+}
+
+export const EMPTY_DRAFT: RequestDraft = { prompt: '', fields: [], action: null, link: '', linkLabel: '' };
+
+export function draftFromStep(s: {
+  info_prompt?: string | null; info_fields?: InfoField[] | null; action?: string | null; info_link?: string | null; info_link_label?: string | null;
+}): RequestDraft {
+  return {
+    prompt: s.info_prompt ?? '',
+    fields: (s.info_fields ?? []).map((f) => ({ ...f })),
+    action: s.action ?? null,
+    link: s.info_link ?? '',
+    linkLabel: s.info_link_label ?? '',
+  };
+}
+
+/** The same draft written one way, so "required: false" and "no required" do not look like a change. */
+export function cleanDraft(d: RequestDraft): RequestDraft {
+  return {
+    prompt: d.prompt.trim(),
+    fields: d.fields.map((f) => ({
+      key: f.key,
+      label: f.label.trim(),
+      type: f.type,
+      ...(f.required ? { required: true } : {}),
+      ...(f.type === 'select' ? { options: (f.options ?? []).map((o) => o.trim()).filter(Boolean) } : {}),
+    })),
+    action: d.action || null,
+    link: d.link.trim(),
+    linkLabel: d.link.trim() ? d.linkLabel.trim() : '',
+  };
+}
+
+export const sameDraft = (a: RequestDraft, b: RequestDraft): boolean => JSON.stringify(cleanDraft(a)) === JSON.stringify(cleanDraft(b));
+
+/** Does the draft ask for anything at all? */
+export const draftAsks = (d: RequestDraft): boolean => d.fields.length > 0 || d.action !== null || d.link.trim() !== '';
+
+/** The first problem with a draft, in plain words, or null when it can be saved. */
+export function validateDraft(d: RequestDraft): string | null {
+  const c = cleanDraft(d);
+  const problem = validateFields(c.fields);
+  if (problem) return problem;
+  if (c.link && !isHttpsLink(c.link)) return 'The link must start with https:// (a secure address).';
+  return null;
+}
+
+/** What actually changed on a step. The one Save button saves only these, in this order. */
+export function stepChanges(
+  step: { status: string; note: string | null } & Parameters<typeof draftFromStep>[0],
+  status: string,
+  note: string,
+  draft: RequestDraft,
+): { statusOrNote: boolean; request: boolean; any: boolean } {
+  const statusOrNote = status !== step.status || note.trim() !== (step.note ?? '');
+  const request = !sameDraft(draft, draftFromStep(step));
+  return { statusOrNote, request, any: statusOrNote || request };
+}
+
+/* ---------------------------------------------------------------- what we tell the client we need */
+
+const OUTCOME = /^(.*?)\s+(submitted|connected|verified|approved|registered|completed|activated|confirmed|received|finished)$/i;
+
+/** "Carrier registration submitted" becomes "have your carrier registration submitted". Null when the title is not that shape. */
+export function outcomePhrase(title: string): string | null {
+  const m = title.trim().match(OUTCOME);
+  if (!m) return null;
+  const noun = m[1].trim().replace(/^(your|the)\s+/i, '');
+  if (!noun) return null;
+  // lower-case the first letter of a normal word, but leave acronyms such as "A2P" alone
+  const word = /^[A-Z][a-z]/.test(noun) ? noun.charAt(0).toLowerCase() + noun.slice(1) : noun;
+  return `have your ${word} ${m[2].toLowerCase()}`;
+}
+
+const endSentence = (s: string) => (/[.!?]$/.test(s) ? s : `${s}.`);
+
+/**
+ * One short sentence saying what we need from the client, in their words. It describes the ask, not the step's name,
+ * and adds the admin's own note when there is one ("The legal name must match your IRS letter.").
+ */
+export function needLine(s: { title: string; note?: string | null; action?: string | null; info_link?: string | null; info_fields?: unknown[] | null }): string {
+  const to = outcomePhrase(s.title);
+  const purpose = to ? ` to ${to}` : '';
+  let base: string;
+  if (s.action === 'registration_form') base = `We need your business details${purpose || ' so we can file your carrier registration'}.`;
+  else if (s.action === 'connect_calendar') base = 'We need you to connect your Google Calendar.';
+  else if (s.info_link) base = `We need you to fill in a short form${purpose}.`;
+  else if ((s.info_fields ?? []).length > 0) base = `We need a few details from you${purpose || ` to finish "${s.title}"`}.`;
+  else base = `We need a quick reply from you${purpose || ` to finish "${s.title}"`}.`;
+  const note = (s.note ?? '').trim();
+  return note ? `${base} ${endSentence(note)}` : base;
+}
