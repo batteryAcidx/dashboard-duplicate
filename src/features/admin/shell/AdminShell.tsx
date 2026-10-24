@@ -3,7 +3,7 @@ import { ChevronDown, LogOut, MapPin, Users } from 'lucide-react';
 import { IntegrationsProvider } from '../../../integrations';
 import { SyncProvider } from '../../../lib/sync';
 import { SyncIndicator } from '../../../components/SyncIndicator';
-import { adminMenu, showWikiLink } from '../../../domain';
+import { adminMenu } from '../../../domain';
 import type { AdminSection } from '../../../domain';
 
 export type { AdminSection };
@@ -37,8 +37,8 @@ const menuItemCls = 'flex w-full cursor-pointer items-center gap-3 px-4 py-3 tex
 
 /**
  * The admin frame. It only ever appears AFTER the two-factor check, so nobody sees the navigation without it.
- * Top bar: Clients and Territories. Account menu: Integrations, Settings, Client dashboard, Sign out
- * (never the page you are on). Footer: Wiki. Phone: the two main pages along the bottom.
+ * Top bar: Clients and Territories. Account menu: Integrations, Wiki, Settings, Client dashboard, Sign out
+ * (never the page you are on). Phone: the two main pages along the bottom.
  */
 export const AdminShell: React.FC<Props> = ({ section, userEmail, onNavigate, onSignOut, initialOpen = false, children }) => {
   const [open, setOpen] = useState(initialOpen);
@@ -123,15 +123,7 @@ export const AdminShell: React.FC<Props> = ({ section, userEmail, onNavigate, on
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-5 pb-16 sm:px-8">{children}</main>
-
-      <footer className="mx-auto max-w-6xl border-t border-white/[0.06] px-5 pb-28 pt-8 text-sm sm:px-8 md:pb-12">
-        {showWikiLink(section) && (
-          <button type="button" onClick={() => onNavigate('/admin/wiki')} className="cursor-pointer font-semibold text-slate-400 transition-colors hover:text-[#ffc174]">
-            Wiki
-          </button>
-        )}
-      </footer>
+      <main className="mx-auto max-w-6xl px-5 pb-28 sm:px-8 md:pb-16">{children}</main>
 
       {/* phones: the two main pages live at the bottom, where a thumb can reach */}
       <nav

@@ -17,7 +17,7 @@ import {
 } from '../src/domain/setup.ts';
 import { START_HERE, WIKI_TOPICS, isWikiTopic } from '../src/integrations/wiki.ts';
 import {
-  adminMenu, ownerMenu, parseTarget, showWikiLink,
+  adminMenu, ownerMenu, parseTarget,
   EMPTY_REGISTRATION, PATH_LABEL, REGISTRATION_STATUS, einDigits, errorCount, formFromSaved, formatEin, isHttpsLink, isPluggedIn, maskEin,
   registrationErrorText, registrationLocked, registrationPath, registrationPayload, validateRegistration,
 } from '../src/domain/index.ts';
@@ -832,10 +832,10 @@ describe('the account menu never offers the page you are on', () => {
   });
 
   test('the admin menu holds what the top bar does not, minus the page you are on', () => {
-    assert.deepEqual(adminMenu('clients').map((i) => i.label), ['Integrations', 'Settings', 'Client dashboard']);
-    assert.deepEqual(adminMenu('territories').map((i) => i.label), ['Integrations', 'Settings', 'Client dashboard']);
-    assert.deepEqual(adminMenu('integrations').map((i) => i.label), ['Settings', 'Client dashboard']);
-    assert.deepEqual(adminMenu('settings').map((i) => i.label), ['Integrations', 'Client dashboard']);
+    assert.deepEqual(adminMenu('clients').map((i) => i.label), ['Integrations', 'Wiki', 'Settings', 'Client dashboard']);
+    assert.deepEqual(adminMenu('territories').map((i) => i.label), ['Integrations', 'Wiki', 'Settings', 'Client dashboard']);
+    assert.deepEqual(adminMenu('integrations').map((i) => i.label), ['Wiki', 'Settings', 'Client dashboard']);
+    assert.deepEqual(adminMenu('settings').map((i) => i.label), ['Integrations', 'Wiki', 'Client dashboard']);
     assert.deepEqual(adminMenu('wiki').map((i) => i.label), ['Integrations', 'Settings', 'Client dashboard']);
     for (const section of ['clients', 'territories', 'integrations', 'settings', 'wiki'] as const) {
       const labels = adminMenu(section).map((i) => i.label);
@@ -847,11 +847,6 @@ describe('the account menu never offers the page you are on', () => {
     for (const i of [...adminMenu('clients'), ...ownerMenu(undefined, true)]) assert.match(i.path, /^\/[a-z/-]*$/, i.label);
   });
 
-  test('the Wiki link at the bottom is hidden on the Wiki itself', () => {
-    assert.equal(showWikiLink('clients'), true);
-    assert.equal(showWikiLink('settings'), true);
-    assert.equal(showWikiLink('wiki'), false);
-  });
 });
 
 describe('reading an address: the bug where "wiki#stripe" became a client', () => {

@@ -37,14 +37,12 @@ export type AdminSection = 'clients' | 'territories' | 'integrations' | 'setting
 export function adminMenu(section: AdminSection): MenuItem[] {
   const all: (MenuItem & { section?: AdminSection })[] = [
     { key: 'integrations', section: 'integrations', label: 'Integrations', path: '/admin/integrations' },
+    { key: 'wiki', section: 'wiki', label: 'Wiki', path: '/admin/wiki' },
     { key: 'settings', section: 'settings', label: 'Settings', path: '/admin/settings' },
     { key: 'client-dashboard', label: 'Client dashboard', path: '/queue' },
   ];
   return all.filter((i) => i.section !== section).map(({ section: _s, ...rest }) => rest);
 }
-
-/** The small link at the bottom of every admin page. Hidden on the Wiki itself. */
-export const showWikiLink = (section: AdminSection): boolean => section !== 'wiki';
 
 /* ---------------------------------------------------------------- reading an address */
 

@@ -11,7 +11,7 @@
 | Set up a client's texting number | [SETUP-TWILIO.md](SETUP-TWILIO.md) |
 | Decide how missed calls reach us | [SETUP-CALL-FORWARDING.md](SETUP-CALL-FORWARDING.md) |
 
-The same guides are inside the admin, in the **Wiki** (the link in the footer), with copy buttons, your real addresses filled in, and tick boxes that remember your place. The **Integrations** page shows which services are plugged in.
+The same guides are inside the admin, in the **Wiki** (in the account menu, under your email), with copy buttons, your real addresses filled in, and tick boxes that remember your place. The **Integrations** page shows which services are plugged in.
 
 ## The order to do things in
 

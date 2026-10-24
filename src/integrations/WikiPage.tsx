@@ -21,7 +21,7 @@ const readTopic = (): string => {
   return isWikiTopic(id) ? id : 'start';
 };
 
-/** For you, not for clients: how to set things up. Reached from the footer. */
+/** For you, not for clients: how to set things up. Reached from the account menu. */
 export const WikiPage: React.FC<{ initialTopic?: string }> = ({ initialTopic }) => {
   const [topic, setTopic] = useState<string>(initialTopic && isWikiTopic(initialTopic) ? initialTopic : readTopic());
   const { statuses } = useIntegrations();

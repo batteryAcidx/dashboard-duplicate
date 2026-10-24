@@ -873,13 +873,19 @@ describe('the Wiki: for you, not for clients', () => {
     assert.match(wiki('nonsense'), /Make a pretend client/);
   });
 
-  test('the footer link just says "Wiki", and is hidden on the Wiki itself', () => {
-    const html = renderToStaticMarkup(<AdminShell section="clients" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
-    assert.match(html, /<footer[^>]*>\s*<button[^>]*>Wiki<\/button>/);
-    assert.doesNotMatch(html, /set-up guides and what you are waiting for/);
-    const onWiki = renderToStaticMarkup(<AdminShell section="wiki" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
-    assert.doesNotMatch(onWiki, />Wiki</, 'never offer the page you are on');
+  test('there is no footer: Wiki is in the account menu with the other links', () => {
+    const closed = renderToStaticMarkup(<AdminShell section="clients" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
+    assert.doesNotMatch(closed, /<footer/);
+    assert.doesNotMatch(closed, />Wiki</, 'nothing about the Wiki on the page itself');
+    const open = renderToStaticMarkup(<AdminShell section="clients" initialOpen userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
+    const menu = open.slice(open.indexOf('menu-panel'), open.indexOf('</header>'));
+    assert.match(menu, />Wiki</);
+    const onWiki = renderToStaticMarkup(<AdminShell section="wiki" initialOpen userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
+    const wikiMenu = onWiki.slice(onWiki.indexOf('menu-panel'), onWiki.indexOf('</header>'));
+    assert.doesNotMatch(wikiMenu, />Wiki</, 'never offer the page you are on');
+    assert.match(wikiMenu, />Integrations</);
   });
+
 });
 
 describe('the client\'s "what we need from you"', () => {
@@ -1004,9 +1010,9 @@ describe('the open account menus really follow the rule', () => {
     return html.slice(html.indexOf('menu-panel'), html.indexOf('</header>'));
   };
 
-  test('admin on Clients: Integrations, Settings, Client dashboard, Sign out', () => {
+  test('admin on Clients: Integrations, Wiki, Settings, Client dashboard, Sign out', () => {
     const m = adminMenuHtml('clients');
-    for (const l of ['Integrations', 'Settings', 'Client dashboard', 'Sign out']) assert.match(m, new RegExp(`>${l}<`));
+    for (const l of ['Integrations', 'Wiki', 'Settings', 'Client dashboard', 'Sign out']) assert.match(m, new RegExp(`>${l}<`));
     assert.doesNotMatch(m, />Clients</);
   });
 
