@@ -25,7 +25,7 @@ export const SyncIndicator: React.FC<{ compact?: boolean }> = ({ compact }) => {
         disabled={busy}
         aria-label="Sync everything now"
         title={`${status}. Press to sync now.`}
-        className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200 disabled:cursor-default"
+        className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-200 disabled:cursor-default"
       >
         <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin text-[#ffc174]' : ''}`} aria-hidden="true" />
       </button>

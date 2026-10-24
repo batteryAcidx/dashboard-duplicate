@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ListChecks, LogOut, MessageSquare, Settings, Users } from 'lucide-react';
+import { ListChecks, LogOut, MessageSquare, Settings, Users } from 'lucide-react';
 import { activeOwnerTab, ownerMenu, ownerTabs } from '../domain';
 import type { OwnerPage, OwnerTab } from '../domain';
 import { SyncIndicator } from './SyncIndicator';
@@ -56,27 +56,26 @@ export const AppHeader: React.FC<Props> = ({ companyName, userEmail, current, is
 
   return (
     <>
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 pb-4 pt-6 sm:px-8 lg:px-10">
-        <div className="flex min-w-0 items-center gap-8 lg:gap-10">
-          <span className="truncate font-display text-xl font-extrabold tracking-tight text-slate-100">{companyName}</span>
-          <nav className="hidden items-center gap-1 md:flex" aria-label="Pages">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 pb-3 pt-5 sm:px-8 lg:px-10">
+        <div className="flex min-w-0 items-center gap-10">
+          <span className="truncate font-display text-lg font-bold tracking-tight text-slate-100">{companyName}</span>
+          <nav className="hidden items-center gap-7 md:flex" aria-label="Pages">
             {tabs.map((t) => (
               <button
                 key={t.page}
                 type="button"
                 onClick={() => go(t.path)}
                 aria-current={active === t.page ? 'page' : undefined}
-                className={`cursor-pointer rounded-xl px-4 py-2.5 font-display text-[15px] font-semibold transition-colors ${
-                  active === t.page ? 'bg-white/[0.07] text-slate-100' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`relative cursor-pointer py-2 text-[15px] font-medium transition-colors ${active === t.page ? 'text-slate-100' : 'text-slate-500 hover:text-slate-200'}`}
               >
                 {t.label}
+                {active === t.page && <span aria-hidden="true" className="absolute inset-x-0 -bottom-0.5 h-0.5 rounded-full bg-[#f59e0b]" />}
               </button>
             ))}
           </nav>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1 sm:gap-3">
+        <div className="flex shrink-0 items-center gap-1">
           <SyncIndicator compact />
           <div className="relative" ref={ref}>
             <button
@@ -84,12 +83,11 @@ export const AppHeader: React.FC<Props> = ({ companyName, userEmail, current, is
               onClick={() => setOpen((v) => !v)}
               aria-expanded={open}
               aria-label="Account menu"
-              className="flex h-11 cursor-pointer items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.06]"
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-white/[0.06]"
             >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/[0.1] bg-[#1b2438] text-xs font-bold text-[#ffc174]">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.1] bg-[#1b2438] text-xs font-bold text-[#ffc174]">
                 {(userEmail || 'U').charAt(0).toUpperCase()}
               </span>
-              <ChevronDown className="h-4 w-4 text-slate-500" />
             </button>
             {open && (
               <div className="menu-panel absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0f1424] py-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]">

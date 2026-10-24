@@ -1197,49 +1197,101 @@ describe('the chart on a phone', () => {
 
 describe('the conversation header', () => {
   const open = (id: string, extra: Partial<React.ComponentProps<typeof DashboardBody>> = {}) => render({ selectedLeadId: id, onChangeType: async () => null, onChangeStatus: async () => null, ...extra });
-  const card = (html: string) => html.slice(html.indexOf('aria-label="Contact"'), html.indexOf('aria-label="What we know"') > 0 ? html.indexOf('aria-label="What we know"') : undefined);
+  const one = (over: Partial<DashboardLead>) => render({ selectedLeadId: 'x1', leads: [{ ...base, id: 'x1', name: 'Test Person', ...over }], onChangeType: async () => null, onChangeStatus: async () => null });
+  const header = (html: string) => html.slice(html.indexOf('<header aria-label="Conversation"'), html.indexOf('</header>') + 9);
+  const row = (html: string) => html.slice(html.indexOf('</header>'), html.indexOf('aria-label="What we know"') > 0 ? html.indexOf('aria-label="What we know"') : undefined);
 
-  test('a contact card: initials, the name once, the job and number, and where they are', () => {
+  test('is one compact row, like a chat app: back, avatar, name, one quiet line, and one Call button', () => {
+    const h = header(open('em'));
+    assert.match(h, /aria-label="Back to queue"/);
+    assert.match(h, /lg:hidden/, 'Back is for phones only');
+    assert.match(h, />MB</, 'initials avatar');
+    assert.match(h, /h-10 w-10[^>]*>MB/, 'a small avatar');
+    assert.equal((h.match(/<h3/g) ?? []).length, 1);
+    assert.match(h, /<h3[^>]*>Marcus Brooks<\/h3>/);
+    assert.match(h, /\(214\) 555-0101/);
+    assert.equal((h.match(/<a /g) ?? []).length, 1, 'just one button in the header');
+  });
+
+  test('it is a lot smaller than the old card: no large avatar, no tall buttons, no card around it', () => {
     const html = open('em');
-    const c = card(html);
-    assert.match(c, />MB</, 'initials avatar');
-    assert.equal((html.match(/>Marcus Brooks</g) ?? []).length >= 1, true);
-    assert.match(c, /<h3[^>]*>Marcus Brooks<\/h3>/);
-    assert.match(c, /Not specified/);
-    assert.match(c, /\(214\) 555-0101/);
-    assert.match(c, /1 A St, Dallas/);
+    const h = header(html);
+    for (const big of ['h-14 w-14', 'h-12 ', 'p-5 sm:p-6', 'text-2xl']) assert.ok(!h.includes(big), `${big} should not be in the header`);
+    assert.doesNotMatch(html, /aria-label="Contact"/);
+    assert.ok(h.length < 2400, `the header markup is short (${h.length})`);
   });
 
-  test('Call and Directions are real buttons', () => {
-    const c = card(open('em'));
-    assert.match(c, /<a href="tel:[^"]*"[^>]*>[\s\S]*?Call<\/a>/);
-    assert.match(c, /<a href="https:\/\/[^"]*"[^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>[\s\S]*?Directions<\/a>/);
+  test('the quiet line shows the job and the number, and skips "Not specified"', () => {
+    assert.match(header(open('em')), /<p[^>]*>\(214\) 555-0101<\/p>/);
+    assert.doesNotMatch(header(open('em')), /Not specified/);
+    assert.match(header(one({ insurance: 'Roof repair' })), /<p[^>]*>Roof repair · \(214\) 555-0101<\/p>/);
   });
 
-  test('no phone, no Call button, and no address, no Directions', () => {
-    const noPhone = render({ selectedLeadId: 'x1', leads: [{ ...base, id: 'x1', name: 'No Phone', phone: '' }] });
-    assert.doesNotMatch(card(noPhone), />Call</);
-    const noAddr = render({ selectedLeadId: 'x2', leads: [{ ...base, id: 'x2', name: 'No Address', address: '' }] });
-    assert.doesNotMatch(card(noAddr), />Directions</);
-    assert.match(card(noAddr), />Call</);
+  test('Call is a round icon with the person\'s name for screen readers, and is missing when there is no number', () => {
+    assert.match(header(open('em')), /<a href="tel:[^"]*"[^>]*aria-label="Call Marcus Brooks"/);
+    assert.doesNotMatch(header(one({ phone: '' })), /aria-label="Call /);
   });
 
-  test('the inspection time is a gold pill with a calendar, only when there is one', () => {
-    const withTime = render({ selectedLeadId: 'x3', leads: [{ ...base, id: 'x3', name: 'Booked Person', scheduledTime: 'Tue, Oct 21 · 2:00 PM' }] });
-    assert.match(card(withTime), /rounded-full[^>]*text-\[#ffc174\][^>]*>[\s\S]*?Tue, Oct 21 · 2:00 PM/);
-    assert.doesNotMatch(card(open('em')), /rounded-full border border-\[#ffc174\]\/30/);
+  test('the address is one tappable chip that opens directions, and is missing when there is none', () => {
+    const r = row(open('em'));
+    assert.match(r, /<a href="https:\/\/[^"]*"[^>]*target="_blank"[^>]*rel="noopener noreferrer"/);
+    assert.match(r, /aria-label="Directions to 1 A St, Dallas"/);
+    assert.match(r, />1 A St, Dallas</);
+    assert.doesNotMatch(row(one({ address: '' })), /Directions to/);
+    assert.doesNotMatch(open('em'), />Directions</, 'there is no separate big Directions button any more');
   });
 
-  test('the controls sit at the bottom of the card, and the phone bar is just Back and the urgency', () => {
-    const html = open('pc');
-    assert.match(card(html), /Who is this\? Currently Past client/);
-    const bar = html.slice(html.lastIndexOf('sticky top-0 z-30'), html.indexOf('aria-label="Contact"'));
-    assert.match(bar, /aria-label="Back to queue"/);
-    assert.doesNotMatch(bar, /Dana Ruiz/, 'the name is in the card, not repeated in the bar');
+  test('the inspection time is a small gold chip, only when there is one', () => {
+    assert.match(row(one({ scheduledTime: 'Tue, Oct 21 · 2:00 PM' })), /text-\[#ffc174\][\s\S]*?Tue, Oct 21 · 2:00 PM/);
+    assert.doesNotMatch(row(open('em')), /border-\[#ffc174\]\/30/);
   });
 
-  test('the urgency badge is in the card on a computer, and in the bar on a phone', () => {
-    const html = open('em');
-    assert.equal((html.match(/>EMERGENCY</g) ?? []).length >= 2, true);
+  test('the controls sit in the same slim row', () => {
+    const r = row(open('pc'));
+    assert.match(r, /Who is this\? Currently Past client/);
+    assert.match(r, /flex flex-wrap items-center gap-2/);
+  });
+
+  test('the urgency badge sits beside the name, once', () => {
+    assert.equal((header(open('em')).match(/>EMERGENCY</g) ?? []).length, 1);
+    assert.equal((header(open('hm')).match(/EMERGENCY|PRIORITY/g) ?? []).length, 0, 'nothing for a routine lead');
+  });
+
+  test('on a phone it stays at the top while you read, and on a computer it just sits there', () => {
+    const h = header(open('em'));
+    assert.match(h, /sticky top-0/);
+    assert.match(h, /lg:static/);
+  });
+});
+
+
+describe('the quiet client bar', () => {
+  const bar = (props: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(<SyncProvider><AppHeader companyName="Summit Roofing" userEmail="mike@summit.example" current="contacts" showSetup {...props} /></SyncProvider>);
+  const desktopNav = (html: string) => html.slice(html.indexOf('<nav class="hidden'), html.indexOf('</nav>') + 6);
+  const tag = (html: string, label: string) => (html.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`)) ?? [''])[0];
+
+  test('tabs are plain text with a thin gold underline on the current one, not filled pills', () => {
+    const nav = desktopNav(bar());
+    assert.equal((nav.match(/h-0\.5 rounded-full bg-\[#f59e0b\]/g) ?? []).length, 1, 'exactly one underline');
+    assert.doesNotMatch(nav, /bg-white\/\[0\.07\]/, 'no filled pill');
+    assert.match(nav, /aria-current="page"[^>]*>Contacts/);
+    for (const l of ['Dashboard', 'Setup', 'Settings']) assert.match(nav, new RegExp(`>${l}`));
+  });
+
+  test('Sync and the account button have no boxes around them', () => {
+    const html = bar();
+    for (const label of ['Sync everything now', 'Account menu']) {
+      const t = tag(html, label);
+      assert.ok(t, `${label} exists`);
+      assert.doesNotMatch(t, /border/, `${label} has a border`);
+      assert.match(t, /rounded-full/);
+    }
+    assert.doesNotMatch(html, /data-icon="ChevronDown"/, 'no chevron on the account button');
+  });
+
+  test('the company name is lighter than before', () => {
+    assert.match(bar(), /<span class="truncate font-display text-lg font-bold[^"]*">Summit Roofing</);
+    assert.doesNotMatch(bar(), /text-xl font-extrabold/);
   });
 });
