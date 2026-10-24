@@ -1,25 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, LogOut } from 'lucide-react';
+import { ownerMenu } from '../domain';
+import type { OwnerPage } from '../domain';
 
 interface Props {
   companyName: string;
   userEmail: string;
-  current?: 'dashboard' | 'contacts' | 'settings';
+  current?: OwnerPage;
   isAdmin?: boolean;
   onNavigate?: (path: string) => void;
   onSignOut?: () => void;
   extra?: React.ReactNode;
+  /** start with the menu open (used by tests) */
+  initialOpen?: boolean;
 }
 
-const ITEMS: { key: 'dashboard' | 'contacts' | 'settings'; label: string; path: string }[] = [
-  { key: 'dashboard', label: 'Dashboard', path: '/queue' },
-  { key: 'contacts', label: 'Contacts', path: '/contacts' },
-  { key: 'settings', label: 'Settings', path: '/settings' },
-];
-
 /** The top bar on every client page: the company name on the left, one menu on the right. */
-export const AppHeader: React.FC<Props> = ({ companyName, userEmail, current, isAdmin, onNavigate, onSignOut, extra }) => {
-  const [open, setOpen] = useState(false);
+export const AppHeader: React.FC<Props> = ({ companyName, userEmail, current, isAdmin, onNavigate, onSignOut, extra, initialOpen = false }) => {
+  const [open, setOpen] = useState(initialOpen);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,16 +60,11 @@ export const AppHeader: React.FC<Props> = ({ companyName, userEmail, current, is
           </button>
           {open && (
             <div className="menu-panel absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0f1424] py-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
-              {ITEMS.map((i) => (
-                <button key={i.key} type="button" onClick={() => go(i.path)} className={itemCls(current === i.key)}>
-                  {i.label}
+              {ownerMenu(current, Boolean(isAdmin)).map((i) => (
+                <button key={i.key} type="button" onClick={() => go(i.path)} className={itemCls(false)}>
+                  <span className={i.accent ? 'text-[#ffc174]' : undefined}>{i.label}</span>
                 </button>
               ))}
-              {isAdmin && (
-                <button type="button" onClick={() => go('/admin')} className={itemCls(false)}>
-                  <span className="text-[#ffc174]">Admin</span>
-                </button>
-              )}
               <div className="my-1.5 h-px bg-white/[0.06]" />
               <button
                 type="button"

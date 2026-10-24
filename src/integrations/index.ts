@@ -4,4 +4,3 @@ export { IntegrationsProvider, useIntegration, useIntegrations } from './Integra
 export { NotPluggedIn } from './NotPluggedIn';
 export { IntegrationsPage } from './IntegrationsPage';
 export { WikiPage } from './WikiPage';
-export { WAITING, KIND_LABEL } from './waiting';

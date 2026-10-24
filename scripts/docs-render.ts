@@ -1,9 +1,7 @@
-// Turns the guides and the waiting list into Markdown. The in-app Wiki and the docs folder
+// Turns the guides and the start-here page into Markdown. The in-app Wiki and the docs folder
 // are made from the same data, so they can never disagree. Run `npm run docs` (in engine-tests) after changing a guide.
 import { INTEGRATIONS } from '../src/integrations/catalog';
-import { KIND_LABEL, WAITING, waitingByKind } from '../src/integrations/waiting';
 import type { Guide, GuideStep } from '../src/integrations/guide';
-import type { WaitKind } from '../src/integrations/waiting';
 import { START_HERE } from '../src/integrations/wiki';
 
 export const DOC_CONTEXT = { backendUrl: 'https://<your-project-ref>.supabase.co', appUrl: 'https://dashboard.wedgescale.com' };
@@ -32,19 +30,6 @@ export function renderGuide(id: string): string {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
 }
 
-export function renderWaiting(): string {
-  const out: string[] = [BANNER + '# What you are waiting for', '',
-    'Some steps depend on someone else. Timings come from the services\' own pages and developer reports. They are ranges, not promises.', ''];
-  for (const kind of Object.keys(KIND_LABEL) as WaitKind[]) {
-    out.push(`## ${KIND_LABEL[kind]}`, '');
-    for (const w of waitingByKind(kind)) {
-      out.push(`### ${w.title}`, '', `- **Who:** ${w.who}`, `- **How long:** ${w.typical}`, `- **It blocks:** ${w.blocks}`, `- **Meanwhile:** ${w.meanwhile}`, '');
-    }
-  }
-  out.push(`*${WAITING.length} items.*`);
-  return out.join('\n') + '\n';
-}
-
 export function renderStart(): string {
   const out: string[] = [BANNER + '# Start here', '', 'The order to do things in. You do not need a client for most of it, and each service is optional.', ''];
   START_HERE.forEach((p, i) => {
@@ -60,5 +45,4 @@ export const DOC_FILES: Record<string, () => string> = {
   'SETUP-EMAIL.md': () => renderGuide('email'),
   'SETUP-TWILIO.md': () => renderGuide('twilio'),
   'SETUP-CALL-FORWARDING.md': () => renderGuide('call_forwarding'),
-  'WAITING.md': renderWaiting,
 };

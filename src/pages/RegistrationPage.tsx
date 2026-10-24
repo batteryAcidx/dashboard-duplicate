@@ -77,7 +77,7 @@ export const RegistrationPage: React.FC<Props> = ({ onNavigate, onSignOut, userE
 
   return (
     <div className="min-h-screen w-full bg-[#090e1c] font-body text-[#dee1f7]">
-      <AppHeader companyName={company} userEmail={userEmail} onNavigate={goto} onSignOut={onSignOut} />
+      <AppHeader companyName={company} userEmail={userEmail} current="registration" onNavigate={goto} onSignOut={onSignOut} />
       <main className="mx-auto max-w-3xl px-5 pb-[max(5rem,env(safe-area-inset-bottom))] sm:px-8">
         <button
           type="button"

@@ -1,16 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, LogOut, MapPin, Plug, Settings, Users } from 'lucide-react';
+import { ChevronDown, LogOut, MapPin, Users } from 'lucide-react';
 import { IntegrationsProvider } from '../../../integrations';
 import { SyncProvider } from '../../../lib/sync';
 import { SyncIndicator } from '../../../components/SyncIndicator';
+import { adminMenu, showWikiLink } from '../../../domain';
+import type { AdminSection } from '../../../domain';
 
-export type AdminSection = 'clients' | 'territories' | 'integrations' | 'settings' | 'wiki';
+export type { AdminSection };
 
+/** The two things you move between all day. Everything else is in the account menu. */
 const NAV: { key: AdminSection; label: string; path: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { key: 'clients', label: 'Clients', path: '/admin', Icon: Users },
   { key: 'territories', label: 'Territories', path: '/admin/territories', Icon: MapPin },
-  { key: 'integrations', label: 'Integrations', path: '/admin/integrations', Icon: Plug },
-  { key: 'settings', label: 'Settings', path: '/admin/settings', Icon: Settings },
 ];
 
 interface Props {
@@ -18,6 +19,8 @@ interface Props {
   userEmail: string;
   onNavigate: (path: string) => void;
   onSignOut?: () => void;
+  /** start with the account menu open (used by tests) */
+  initialOpen?: boolean;
   children: React.ReactNode;
 }
 
@@ -30,12 +33,15 @@ const Brand: React.FC = () => (
   </span>
 );
 
+const menuItemCls = 'flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white';
+
 /**
  * The admin frame. It only ever appears AFTER the two-factor check, so nobody sees the navigation without it.
- * Desktop: a top bar. Phone: a slim top bar and a bottom bar you can reach with your thumb.
+ * Top bar: Clients and Territories. Account menu: Integrations, Settings, Client dashboard, Sign out
+ * (never the page you are on). Footer: Wiki. Phone: the two main pages along the bottom.
  */
-export const AdminShell: React.FC<Props> = ({ section, userEmail, onNavigate, onSignOut, children }) => {
-  const [open, setOpen] = useState(false);
+export const AdminShell: React.FC<Props> = ({ section, userEmail, onNavigate, onSignOut, initialOpen = false, children }) => {
+  const [open, setOpen] = useState(initialOpen);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,6 +51,11 @@ export const AdminShell: React.FC<Props> = ({ section, userEmail, onNavigate, on
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+
+  const go = (path: string) => {
+    setOpen(false);
+    onNavigate(path);
+  };
 
   return (
     <SyncProvider>
@@ -89,26 +100,11 @@ export const AdminShell: React.FC<Props> = ({ section, userEmail, onNavigate, on
           {open && (
             <div className="menu-panel absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0f1424] py-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
               <div className="truncate px-4 pb-2 pt-2.5 text-xs text-slate-500 md:hidden">{userEmail}</div>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  onNavigate('/admin/settings');
-                }}
-                className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white"
-              >
-                Settings
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  onNavigate('/queue');
-                }}
-                className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white"
-              >
-                Client dashboard
-              </button>
+              {adminMenu(section).map((item) => (
+                <button key={item.key} type="button" onClick={() => go(item.path)} className={menuItemCls}>
+                  {item.label}
+                </button>
+              ))}
               <div className="my-1.5 h-px bg-white/[0.06]" />
               <button
                 type="button"
@@ -116,7 +112,7 @@ export const AdminShell: React.FC<Props> = ({ section, userEmail, onNavigate, on
                   setOpen(false);
                   onSignOut?.();
                 }}
-                className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-red-400"
+                className={`${menuItemCls} hover:text-red-400`}
               >
                 <LogOut className="h-4 w-4" />
                 Sign out
@@ -130,25 +126,19 @@ export const AdminShell: React.FC<Props> = ({ section, userEmail, onNavigate, on
       <main className="mx-auto max-w-6xl px-5 pb-16 sm:px-8">{children}</main>
 
       <footer className="mx-auto max-w-6xl border-t border-white/[0.06] px-5 pb-28 pt-8 text-sm sm:px-8 md:pb-12">
-        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-slate-500">
-          <button
-            type="button"
-            onClick={() => onNavigate('/admin/wiki')}
-            aria-current={section === 'wiki' ? 'page' : undefined}
-            className={`cursor-pointer font-semibold transition-colors hover:text-[#ffc174] ${section === 'wiki' ? 'text-[#ffc174]' : 'text-slate-400'}`}
-          >
-            Wiki: set-up guides and what you are waiting for
+        {showWikiLink(section) && (
+          <button type="button" onClick={() => onNavigate('/admin/wiki')} className="cursor-pointer font-semibold text-slate-400 transition-colors hover:text-[#ffc174]">
+            Wiki
           </button>
-          <span>WedgeScale admin</span>
-        </div>
+        )}
       </footer>
 
-      {/* phones: the sections live at the bottom, where a thumb can reach */}
+      {/* phones: the two main pages live at the bottom, where a thumb can reach */}
       <nav
         aria-label="Admin sections"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.07] bg-[#0a0f1d]/95 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden"
       >
-        <div className="mx-auto grid max-w-md grid-cols-4">
+        <div className="mx-auto grid max-w-md grid-cols-2">
           {NAV.map(({ key, label, path, Icon }) => (
             <button
               key={key}

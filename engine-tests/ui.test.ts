@@ -17,12 +17,12 @@ import {
 } from '../src/domain/setup.ts';
 import { START_HERE, WIKI_TOPICS, isWikiTopic } from '../src/integrations/wiki.ts';
 import {
+  adminMenu, ownerMenu, parseTarget, showWikiLink,
   EMPTY_REGISTRATION, PATH_LABEL, REGISTRATION_STATUS, einDigits, errorCount, formFromSaved, formatEin, isHttpsLink, isPluggedIn, maskEin,
   registrationErrorText, registrationLocked, registrationPath, registrationPayload, validateRegistration,
 } from '../src/domain/index.ts';
 import { getGuideProgress, setGuideProgress } from '../src/lib/preferences.ts';
 import { INTEGRATIONS, integrationInfo } from '../src/integrations/catalog.ts';
-import { KIND_LABEL, WAITING, waitingByKind } from '../src/integrations/waiting.ts';
 import {
   EMPTY_FILTERS,
   actionLabel,
@@ -702,13 +702,6 @@ describe('integrations: the catalog, the guides and the waiting list', () => {
     assert.deepEqual(getGuideProgress('stripe', { getItem: () => { throw new Error('blocked'); } }), []);
   });
 
-  test('the waiting list is complete: every kind has items, ids are unique, nothing is promised without a time', () => {
-    const ids = WAITING.map((w) => w.id);
-    assert.equal(new Set(ids).size, ids.length);
-    for (const k of Object.keys(KIND_LABEL) as (keyof typeof KIND_LABEL)[]) assert.ok(waitingByKind(k).length >= 1, k);
-    for (const w of WAITING) assert.ok(w.title && w.who && w.typical && w.blocks && w.meanwhile, w.id);
-    assert.ok(WAITING.some((w) => /Twilio/.test(w.title)) && WAITING.some((w) => /Google/.test(w.title)) && WAITING.some((w) => /Stripe/.test(w.title)));
-  });
 });
 
 
@@ -807,11 +800,75 @@ describe('the Wiki content', () => {
   test('every topic is real, "start" comes first, and every phase has something to do', () => {
     assert.equal(WIKI_TOPICS[0].id, 'start');
     assert.equal(isWikiTopic('stripe'), true);
-    assert.equal(isWikiTopic('waiting'), true);
+    assert.equal(isWikiTopic('waiting'), false, 'the waiting list is gone');
     assert.equal(isWikiTopic('nonsense'), false);
     assert.ok(START_HERE.length >= 4);
     for (const p of START_HERE) assert.ok(p.title && p.why && p.items.length >= 1, p.title);
     // every guide has its own topic
     for (const i of INTEGRATIONS) assert.equal(isWikiTopic(i.id), true, `${i.id} has no Wiki topic`);
+  });
+});
+
+
+describe('the account menu never offers the page you are on', () => {
+  test('a client on each page sees the other two, and never their own', () => {
+    assert.deepEqual(ownerMenu('dashboard', false).map((i) => i.label), ['Contacts', 'Settings']);
+    assert.deepEqual(ownerMenu('contacts', false).map((i) => i.label), ['Dashboard', 'Settings']);
+    assert.deepEqual(ownerMenu('settings', false).map((i) => i.label), ['Dashboard', 'Contacts']);
+  });
+
+  test('pages that are not in the menu (setup, registration) hide nothing', () => {
+    assert.deepEqual(ownerMenu('setup', false).map((i) => i.label), ['Dashboard', 'Contacts', 'Settings']);
+    assert.deepEqual(ownerMenu('registration', false).map((i) => i.label), ['Dashboard', 'Contacts', 'Settings']);
+    assert.deepEqual(ownerMenu(undefined, false).map((i) => i.label), ['Dashboard', 'Contacts', 'Settings']);
+  });
+
+  test('an admin who is also a client gets a way back to the admin, in gold', () => {
+    const items = ownerMenu('settings', true);
+    assert.deepEqual(items.map((i) => i.label), ['Dashboard', 'Contacts', 'Admin']);
+    assert.equal(items[2].path, '/admin');
+    assert.equal(items[2].accent, true);
+    assert.equal(ownerMenu('dashboard', false).some((i) => i.label === 'Admin'), false);
+  });
+
+  test('the admin menu holds what the top bar does not, minus the page you are on', () => {
+    assert.deepEqual(adminMenu('clients').map((i) => i.label), ['Integrations', 'Settings', 'Client dashboard']);
+    assert.deepEqual(adminMenu('territories').map((i) => i.label), ['Integrations', 'Settings', 'Client dashboard']);
+    assert.deepEqual(adminMenu('integrations').map((i) => i.label), ['Settings', 'Client dashboard']);
+    assert.deepEqual(adminMenu('settings').map((i) => i.label), ['Integrations', 'Client dashboard']);
+    assert.deepEqual(adminMenu('wiki').map((i) => i.label), ['Integrations', 'Settings', 'Client dashboard']);
+    for (const section of ['clients', 'territories', 'integrations', 'settings', 'wiki'] as const) {
+      const labels = adminMenu(section).map((i) => i.label);
+      assert.ok(!labels.includes('Clients') && !labels.includes('Territories'), 'those two are in the top bar, not the menu');
+    }
+  });
+
+  test('every item goes somewhere real', () => {
+    for (const i of [...adminMenu('clients'), ...ownerMenu(undefined, true)]) assert.match(i.path, /^\/[a-z/-]*$/, i.label);
+  });
+
+  test('the Wiki link at the bottom is hidden on the Wiki itself', () => {
+    assert.equal(showWikiLink('clients'), true);
+    assert.equal(showWikiLink('settings'), true);
+    assert.equal(showWikiLink('wiki'), false);
+  });
+});
+
+describe('reading an address: the bug where "wiki#stripe" became a client', () => {
+  test('the # part is kept apart from the path', () => {
+    assert.deepEqual(parseTarget('/admin/wiki#stripe'), { path: '/admin/wiki', search: '', hash: '#stripe' });
+    assert.notEqual(parseTarget('/admin/wiki#stripe').path, '/admin/wiki#stripe');
+  });
+
+  test('a query and a # together, in either amount', () => {
+    assert.deepEqual(parseTarget('/admin/x?calendar=connected#top'), { path: '/admin/x', search: '?calendar=connected', hash: '#top' });
+    assert.deepEqual(parseTarget('/setup?calendar=error'), { path: '/setup', search: '?calendar=error', hash: '' });
+    assert.deepEqual(parseTarget('/queue'), { path: '/queue', search: '', hash: '' });
+  });
+
+  test('odd input never produces an empty path', () => {
+    assert.equal(parseTarget('').path, '/');
+    assert.equal(parseTarget('#only').path, '/');
+    assert.equal(parseTarget('/a#').hash, '');
   });
 });

@@ -33,7 +33,7 @@ These depend on other people, so the clock should start as soon as it can.
 
 - Press Publish app on the Google consent screen, then prepare the verification (a live privacy policy, a verified domain, a short recording).
 - Start Stripe's business verification when you are close to a first client.
-- See "What you are waiting for" for every item, how long it usually takes, and what to do meanwhile.
+- Start each client's carrier registration the day their form arrives: the brand is often approved quickly, the campaign takes longer.
 
 ## 5. When your first client signs
 

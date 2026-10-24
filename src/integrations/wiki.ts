@@ -42,7 +42,7 @@ export const START_HERE: StartPhase[] = [
     items: [
       'Press Publish app on the Google consent screen, then prepare the verification (a live privacy policy, a verified domain, a short recording).',
       'Start Stripe\'s business verification when you are close to a first client.',
-      'See "What you are waiting for" for every item, how long it usually takes, and what to do meanwhile.',
+      'Start each client\'s carrier registration the day their form arrives: the brand is often approved quickly, the campaign takes longer.',
     ],
   },
   {
@@ -71,7 +71,6 @@ export const WIKI_TOPICS: WikiTopic[] = [
   { id: 'email', label: 'Email sending' },
   { id: 'twilio', label: 'Twilio' },
   { id: 'call_forwarding', label: 'Call forwarding' },
-  { id: 'waiting', label: 'What you are waiting for' },
 ];
 
 export const isWikiTopic = (id: string): boolean => WIKI_TOPICS.some((t) => t.id === id);

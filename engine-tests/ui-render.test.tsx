@@ -318,17 +318,19 @@ describe('admin: no navigation before the code', () => {
     assert.doesNotMatch(html, /aria-label="Admin sections"/);
   });
 
-  test('the shell shows Clients, Territories and Settings, on a desktop bar and a phone bar', () => {
+  test('the top bar and the phone bar hold only Clients and Territories', () => {
     const html = renderToStaticMarkup(
       <AdminShell section="territories" userEmail="me@wedgescale.com" onNavigate={() => {}}>
         <p>page</p>
       </AdminShell>
     );
     assert.equal((html.match(/aria-label="Admin sections"/g) ?? []).length, 2, 'one bar for desktop, one for phones');
-    for (const label of ['Clients', 'Territories', 'Settings']) assert.match(html, new RegExp(`>${label}<`));
-    assert.match(html, /aria-current="page"[^>]*>[^<]*Territories|aria-current="page"[^>]*>(<svg[^>]*>\s*<\/svg>)?Territories/);
+    for (const label of ['Clients', 'Territories']) assert.equal((html.match(new RegExp(`>${label}<`, 'g')) ?? []).length, 2, `${label} in both bars`);
+    for (const gone of ['Settings', 'Integrations']) assert.doesNotMatch(html, new RegExp(`>${gone}<`), `${gone} moved into the account menu`);
+    assert.match(html, /aria-current="page"[^>]*>(<svg[^>]*>\s*<\/svg>)?Territories/);
     assert.match(html, /<p>page<\/p>/);
     assert.match(html, /fixed inset-x-0 bottom-0/, 'the phone bar is pinned to the bottom');
+    assert.match(html, /grid-cols-2/);
   });
 });
 
@@ -842,7 +844,8 @@ describe('the Wiki: for you, not for clients', () => {
     const html = wiki();
     assert.match(html, />Wiki</);
     assert.match(html, /This is for you, not for clients/);
-    for (const t of ['Start here', 'Stripe', 'Google Calendar', 'Email sending', 'Twilio', 'Call forwarding', 'What you are waiting for']) assert.match(html, new RegExp(`>${t}<`));
+    for (const t of ['Start here', 'Stripe', 'Google Calendar', 'Email sending', 'Twilio', 'Call forwarding']) assert.match(html, new RegExp(`>${t}<`));
+    assert.doesNotMatch(html, /waiting for/i, 'no waiting list');
     assert.match(html, /href="#stripe"/);
     assert.match(html, /aria-current="page"[^>]*>Start here</);
     assert.match(html, /Update the app/);
@@ -860,27 +863,22 @@ describe('the Wiki: for you, not for clients', () => {
     assert.doesNotMatch(html, /When your first client signs/);
   });
 
-  test('the waiting list lives here now', () => {
+  test('the old waiting-list topic is gone, and its address just shows Start here', () => {
     const html = wiki('waiting');
-    assert.match(html, />What you are waiting for</);
-    for (const g of ['Do now', 'Waiting on someone else', 'To decide', 'Still to build']) assert.match(html, new RegExp(g));
-    assert.match(html, /Twilio and the carriers approve a client/);
-    assert.match(html, /Google reviews the app for calendar access/);
-    assert.match(html, /Meanwhile/);
+    assert.doesNotMatch(html, /Twilio and the carriers approve a client/);
+    assert.match(html, /Make a pretend client/);
   });
 
   test('an unknown topic falls back to Start here', () => {
     assert.match(wiki('nonsense'), /Make a pretend client/);
   });
 
-  test('the footer link is on every admin page, and the Wiki is not in the main menu', () => {
+  test('the footer link just says "Wiki", and is hidden on the Wiki itself', () => {
     const html = renderToStaticMarkup(<AdminShell section="clients" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
-    assert.match(html, /<footer/);
-    assert.match(html, />Wiki: set-up guides and what you are waiting for</);
-    const nav = html.slice(html.indexOf('aria-label="Admin sections"'), html.indexOf('</header>'));
-    assert.doesNotMatch(nav, /Wiki/);
+    assert.match(html, /<footer[^>]*>\s*<button[^>]*>Wiki<\/button>/);
+    assert.doesNotMatch(html, /set-up guides and what you are waiting for/);
     const onWiki = renderToStaticMarkup(<AdminShell section="wiki" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
-    assert.match(onWiki, /aria-current="page"[^>]*>Wiki: set-up guides/);
+    assert.doesNotMatch(onWiki, />Wiki</, 'never offer the page you are on');
   });
 });
 
@@ -960,11 +958,6 @@ describe('integrations: a service that is not plugged in says so, instead of fai
     assert.doesNotMatch(on, /\(not plugged in yet\)/);
   });
 
-  test('the admin menu has Integrations, in both the top bar and the phone bar', () => {
-    const html = renderToStaticMarkup(<AdminShell section="integrations" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
-    assert.equal((html.match(/>Integrations</g) ?? []).length, 2);
-    assert.match(html, /grid-cols-4/);
-  });
 });
 
 describe('integrations: a guide you can tick off', () => {
@@ -1001,5 +994,50 @@ describe('integrations: a guide you can tick off', () => {
     assert.match(html, /Option A/);
     assert.match(html, /Option C/);
     assert.match(html, /deliberately not made yet/);
+  });
+});
+
+
+describe('the open account menus really follow the rule', () => {
+  const adminMenuHtml = (section: 'clients' | 'integrations' | 'settings' | 'wiki') => {
+    const html = renderToStaticMarkup(<AdminShell section={section} initialOpen userEmail="me@wedgescale.com" onNavigate={() => {}}><p>x</p></AdminShell>);
+    return html.slice(html.indexOf('menu-panel'), html.indexOf('</header>'));
+  };
+
+  test('admin on Clients: Integrations, Settings, Client dashboard, Sign out', () => {
+    const m = adminMenuHtml('clients');
+    for (const l of ['Integrations', 'Settings', 'Client dashboard', 'Sign out']) assert.match(m, new RegExp(`>${l}<`));
+    assert.doesNotMatch(m, />Clients</);
+  });
+
+  test('admin on Settings: no Settings in the menu', () => {
+    const m = adminMenuHtml('settings');
+    assert.doesNotMatch(m, />Settings</);
+    for (const l of ['Integrations', 'Client dashboard', 'Sign out']) assert.match(m, new RegExp(`>${l}<`));
+  });
+
+  test('admin on Integrations: no Integrations in the menu', () => {
+    const m = adminMenuHtml('integrations');
+    assert.doesNotMatch(m, />Integrations</);
+    assert.match(m, />Settings</);
+  });
+
+  test('a client on Settings does not see Settings, on Contacts does not see Contacts', () => {
+    const menu = (current: 'dashboard' | 'contacts' | 'settings', isAdmin = false) => {
+      const html = renderToStaticMarkup(<AppHeader companyName="Summit" userEmail="m@s.co" current={current} isAdmin={isAdmin} initialOpen />);
+      return html.slice(html.indexOf('menu-panel'));
+    };
+    const onSettings = menu('settings');
+    assert.doesNotMatch(onSettings, />Settings</);
+    assert.match(onSettings, />Dashboard</);
+    assert.match(onSettings, />Contacts</);
+    assert.match(onSettings, />Sign out</);
+    const onContacts = menu('contacts');
+    assert.doesNotMatch(onContacts, />Contacts</);
+    assert.match(onContacts, />Settings</);
+    const onDash = menu('dashboard');
+    assert.doesNotMatch(onDash, />Dashboard</);
+    assert.doesNotMatch(onDash, />Admin</);
+    assert.match(menu('dashboard', true), />Admin</);
   });
 });

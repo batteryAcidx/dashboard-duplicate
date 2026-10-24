@@ -10,6 +10,7 @@ import { ContactsPage } from './pages/ContactsPage'; // CONTACTS
 import { AdminPage } from './pages/AdminPage'; // ADMIN
 import { NotFoundPage } from './pages/NotFoundPage';
 import { authApi } from './api';
+import { parseTarget } from './domain';
 import { clearAccountCache } from './lib/accountCache';
 
 
@@ -119,11 +120,9 @@ export default function App() {
   }, []);
 
   const navigate = (to: string) => {
-    const pathOnly = to.split('?')[0];
-    const searchOnly = to.includes('?') ? '?' + to.split('?')[1] : '';
-    const clean = getCleanPath(pathOnly);
-    const targetUrl = clean + searchOnly;
-    window.history.pushState({}, '', targetUrl);
+    const t = parseTarget(to);
+    const clean = getCleanPath(t.path);
+    window.history.pushState({}, '', clean + t.search + t.hash);
     setCurrentPath(clean);
   };
 

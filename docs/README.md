@@ -10,7 +10,6 @@
 | Email clients from the admin | [SETUP-EMAIL.md](SETUP-EMAIL.md) |
 | Set up a client's texting number | [SETUP-TWILIO.md](SETUP-TWILIO.md) |
 | Decide how missed calls reach us | [SETUP-CALL-FORWARDING.md](SETUP-CALL-FORWARDING.md) |
-| See what is blocked on someone else, and how long it takes | [WAITING.md](WAITING.md) |
 
 The same guides are inside the admin, in the **Wiki** (the link in the footer), with copy buttons, your real addresses filled in, and tick boxes that remember your place. The **Integrations** page shows which services are plugged in.
 
@@ -18,7 +17,7 @@ The same guides are inside the admin, in the **Wiki** (the link in the footer), 
 
 1. Run the database scripts ([RUNNING-THE-SQL.md](RUNNING-THE-SQL.md)). Nothing new works without them.
 2. Plug in the services you want, one at a time, in any order. Each one is optional: a service you have not plugged in just says "not plugged in yet" where it would be used.
-3. Start the outside approvals early, because they are the slow part ([WAITING.md](WAITING.md)).
+3. Start the outside approvals early (Google's app review, Stripe's business check, each client's carrier registration), because they are the slow part.
 
 ## Before you push a change
 

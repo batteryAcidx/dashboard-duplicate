@@ -4,7 +4,6 @@ import { APP_URL, BACKEND_URL } from '../lib/config';
 import { INTEGRATIONS, integrationInfo } from './catalog';
 import { GuideView } from './GuideView';
 import { useIntegrations } from './IntegrationsContext';
-import { WaitingList } from './WaitingList';
 import { START_HERE, WIKI_TOPICS, isWikiTopic } from './wiki';
 import type { IntegrationId, IntegrationState } from '../domain';
 
@@ -22,7 +21,7 @@ const readTopic = (): string => {
   return isWikiTopic(id) ? id : 'start';
 };
 
-/** For you, not for clients: how to set things up, and what you are waiting for. Reached from the footer. */
+/** For you, not for clients: how to set things up. Reached from the footer. */
 export const WikiPage: React.FC<{ initialTopic?: string }> = ({ initialTopic }) => {
   const [topic, setTopic] = useState<string>(initialTopic && isWikiTopic(initialTopic) ? initialTopic : readTopic());
   const { statuses } = useIntegrations();
@@ -40,7 +39,7 @@ export const WikiPage: React.FC<{ initialTopic?: string }> = ({ initialTopic }) 
 
   return (
     <>
-      <PageTitle eyebrow="Admin" title="Wiki" subtitle="How to set things up, and what you are waiting for. This is for you, not for clients." />
+      <PageTitle eyebrow="Admin" title="Wiki" subtitle="How to set things up. This is for you, not for clients." />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[230px_minmax(0,1fr)] lg:gap-12">
         <nav aria-label="Wiki topics" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] lg:sticky lg:top-6 lg:mx-0 lg:block lg:space-y-1 lg:self-start lg:overflow-visible lg:px-0">
@@ -110,12 +109,6 @@ export const WikiPage: React.FC<{ initialTopic?: string }> = ({ initialTopic }) 
             </div>
           )}
 
-          {topic === 'waiting' && (
-            <div>
-              <h2 className="mb-3 font-display text-2xl font-extrabold tracking-tight text-slate-100">What you are waiting for</h2>
-              <WaitingList />
-            </div>
-          )}
         </section>
       </div>
     </>

@@ -9,4 +9,5 @@ export * from './health';
 export * from './setup';
 export * from './models';
 export * from './integrations';
+export * from './navigation';
 export * from './registration';
