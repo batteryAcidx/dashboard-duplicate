@@ -4,6 +4,7 @@ import { isConfigured, ownerApi } from '../api';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 import { ContactTypeControl } from '../components/ContactTypeControl';
 import { AppHeader } from '../components/AppHeader';
+import { PlatformFooter } from '../components/PlatformFooter';
 import { Card as UiCard, inputCls as uiInputCls } from '../components/ui';
 import { ContactType, PICKABLE_TYPES, TYPE_LABEL, normalizeType } from '../lib/leadView';
 import { MAX_IMPORT_ROWS, formatPhone, parseContactCsv, toE164 } from '../lib/contacts';
@@ -427,6 +428,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate, onSignOu
           </div>
         )}
       </main>
+      <PlatformFooter />
     </div>
   );
 };

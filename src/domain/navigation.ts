@@ -33,13 +33,13 @@ export type AdminSection = 'clients' | 'territories' | 'integrations' | 'setting
 /**
  * Clients and Territories are always in the bar at the top, so they are not here.
  * Everything else lives in the account menu, minus the page you are on.
+ * (There is no link to the client dashboard: the admin is a different place.)
  */
 export function adminMenu(section: AdminSection): MenuItem[] {
   const all: (MenuItem & { section?: AdminSection })[] = [
     { key: 'integrations', section: 'integrations', label: 'Integrations', path: '/admin/integrations' },
     { key: 'wiki', section: 'wiki', label: 'Wiki', path: '/admin/wiki' },
     { key: 'settings', section: 'settings', label: 'Settings', path: '/admin/settings' },
-    { key: 'client-dashboard', label: 'Client dashboard', path: '/queue' },
   ];
   return all.filter((i) => i.section !== section).map(({ section: _s, ...rest }) => rest);
 }

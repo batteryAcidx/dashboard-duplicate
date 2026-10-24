@@ -29,6 +29,8 @@ import { RegistrationCard } from '../src/features/admin/tabs/RegistrationCard.ts
 import { IntegrationsPage } from '../src/integrations/IntegrationsPage.tsx';
 import { WikiPage } from '../src/integrations/WikiPage.tsx';
 import { SetupNeeds } from '../src/components/SetupNeeds.tsx';
+import { PlatformFooter } from '../src/components/PlatformFooter.tsx';
+import { readFileSync } from 'node:fs';
 import { IntegrationsProvider } from '../src/integrations/IntegrationsContext.tsx';
 import { NotPluggedIn } from '../src/integrations/NotPluggedIn.tsx';
 import { GuideView } from '../src/integrations/GuideView.tsx';
@@ -1010,16 +1012,17 @@ describe('the open account menus really follow the rule', () => {
     return html.slice(html.indexOf('menu-panel'), html.indexOf('</header>'));
   };
 
-  test('admin on Clients: Integrations, Wiki, Settings, Client dashboard, Sign out', () => {
+  test('admin on Clients: Integrations, Wiki, Settings, Sign out, and no client dashboard', () => {
     const m = adminMenuHtml('clients');
-    for (const l of ['Integrations', 'Wiki', 'Settings', 'Client dashboard', 'Sign out']) assert.match(m, new RegExp(`>${l}<`));
+    for (const l of ['Integrations', 'Wiki', 'Settings', 'Sign out']) assert.match(m, new RegExp(`>${l}<`));
     assert.doesNotMatch(m, />Clients</);
+    assert.doesNotMatch(m, /Client dashboard/);
   });
 
   test('admin on Settings: no Settings in the menu', () => {
     const m = adminMenuHtml('settings');
     assert.doesNotMatch(m, />Settings</);
-    for (const l of ['Integrations', 'Client dashboard', 'Sign out']) assert.match(m, new RegExp(`>${l}<`));
+    for (const l of ['Integrations', 'Wiki', 'Sign out']) assert.match(m, new RegExp(`>${l}<`));
   });
 
   test('admin on Integrations: no Integrations in the menu', () => {
@@ -1045,5 +1048,27 @@ describe('the open account menus really follow the rule', () => {
     assert.doesNotMatch(onDash, />Dashboard</);
     assert.doesNotMatch(onDash, />Admin</);
     assert.match(menu('dashboard', true), />Admin</);
+  });
+});
+
+
+describe('the client side ends with the platform footer, like the sign-in page', () => {
+  test('the footer says exactly what the login page says', () => {
+    const html = renderToStaticMarkup(<PlatformFooter />);
+    assert.match(html, /<footer/);
+    assert.match(html, />WedgeScale Dashboard Platform</);
+    assert.match(readFileSync('../src/pages/LoginPage.tsx', 'utf8'), /WedgeScale Dashboard Platform/);
+  });
+
+  test('every client page includes it exactly once', () => {
+    for (const page of ['QueuePage', 'ContactsPage', 'SettingsPage', 'SetupPage', 'RegistrationPage']) {
+      const text = readFileSync(`../src/pages/${page}.tsx`, 'utf8');
+      assert.equal((text.match(/<PlatformFooter \/>/g) ?? []).length, 1, `${page} should end with the footer`);
+    }
+  });
+
+  test('the admin does not get it: that is the client side only', () => {
+    const html = renderToStaticMarkup(<AdminShell section="clients" userEmail="a@b.c" onNavigate={() => {}}><p>x</p></AdminShell>);
+    assert.doesNotMatch(html, /WedgeScale Dashboard Platform/);
   });
 });

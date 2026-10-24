@@ -4,6 +4,7 @@ import { authApi, isConfigured, ownerApi } from '../api';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 import { formatBlock, zonedToUtc } from '../lib/tz';
 import { AppHeader } from '../components/AppHeader';
+import { PlatformFooter } from '../components/PlatformFooter';
 import { inputCls as uiInputCls } from '../components/ui';
 
 // Keep in sync with Supabase: Authentication > Sign In / Providers > Email > Minimum password length
@@ -924,6 +925,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
           </>
         )}
       </main>
+      <PlatformFooter />
     </div>
   );
 };

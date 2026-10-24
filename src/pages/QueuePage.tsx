@@ -6,6 +6,7 @@ import { DashboardBody, DashboardLead, DashboardStats, WindowKey } from '../comp
 import { LeadStatus } from '../components/LeadStatusControl';
 import { buildChart } from '../lib/chart';
 import { AppHeader } from '../components/AppHeader';
+import { PlatformFooter } from '../components/PlatformFooter';
 import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 import {
@@ -579,6 +580,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
           onChangeType={handleChangeType}
         />
       )}
+      <PlatformFooter />
     </div>
   );
 };

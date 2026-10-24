@@ -4,6 +4,7 @@ import { isConfigured, ownerApi } from '../api';
 import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
 import { AppHeader } from '../components/AppHeader';
+import { PlatformFooter } from '../components/PlatformFooter';
 import { SetupStepCard } from '../components/SetupStepCard';
 import { SetupNeeds } from '../components/SetupNeeds';
 import type { ClientStep } from '../domain/index';
@@ -202,6 +203,7 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
           </>
         )}
       </main>
+      <PlatformFooter />
     </div>
   );
 };

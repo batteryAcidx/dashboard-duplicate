@@ -37,7 +37,7 @@ const menuItemCls = 'flex w-full cursor-pointer items-center gap-3 px-4 py-3 tex
 
 /**
  * The admin frame. It only ever appears AFTER the two-factor check, so nobody sees the navigation without it.
- * Top bar: Clients and Territories. Account menu: Integrations, Wiki, Settings, Client dashboard, Sign out
+ * Top bar: Clients and Territories. Account menu: Integrations, Wiki, Settings, Sign out
  * (never the page you are on). Phone: the two main pages along the bottom.
  */
 export const AdminShell: React.FC<Props> = ({ section, userEmail, onNavigate, onSignOut, initialOpen = false, children }) => {

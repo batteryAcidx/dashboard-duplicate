@@ -832,11 +832,14 @@ describe('the account menu never offers the page you are on', () => {
   });
 
   test('the admin menu holds what the top bar does not, minus the page you are on', () => {
-    assert.deepEqual(adminMenu('clients').map((i) => i.label), ['Integrations', 'Wiki', 'Settings', 'Client dashboard']);
-    assert.deepEqual(adminMenu('territories').map((i) => i.label), ['Integrations', 'Wiki', 'Settings', 'Client dashboard']);
-    assert.deepEqual(adminMenu('integrations').map((i) => i.label), ['Wiki', 'Settings', 'Client dashboard']);
-    assert.deepEqual(adminMenu('settings').map((i) => i.label), ['Integrations', 'Wiki', 'Client dashboard']);
-    assert.deepEqual(adminMenu('wiki').map((i) => i.label), ['Integrations', 'Settings', 'Client dashboard']);
+    assert.deepEqual(adminMenu('clients').map((i) => i.label), ['Integrations', 'Wiki', 'Settings']);
+    assert.deepEqual(adminMenu('territories').map((i) => i.label), ['Integrations', 'Wiki', 'Settings']);
+    assert.deepEqual(adminMenu('integrations').map((i) => i.label), ['Wiki', 'Settings']);
+    assert.deepEqual(adminMenu('settings').map((i) => i.label), ['Integrations', 'Wiki']);
+    assert.deepEqual(adminMenu('wiki').map((i) => i.label), ['Integrations', 'Settings']);
+    for (const section of ['clients', 'territories', 'integrations', 'settings', 'wiki'] as const) {
+      assert.ok(!adminMenu(section).some((i) => /client dashboard/i.test(i.label) || i.path === '/queue'), 'the admin never links to the client dashboard');
+    }
     for (const section of ['clients', 'territories', 'integrations', 'settings', 'wiki'] as const) {
       const labels = adminMenu(section).map((i) => i.label);
       assert.ok(!labels.includes('Clients') && !labels.includes('Territories'), 'those two are in the top bar, not the menu');

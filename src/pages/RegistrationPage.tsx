@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { AppHeader } from '../components/AppHeader';
+import { PlatformFooter } from '../components/PlatformFooter';
 import { Chip, Notice, PageTitle } from '../components/ui';
 import { RegistrationFormView } from '../features/registration/RegistrationFormView';
 import { isConfigured, ownerApi } from '../api';
@@ -133,6 +134,7 @@ export const RegistrationPage: React.FC<Props> = ({ onNavigate, onSignOut, userE
           </>
         )}
       </main>
+      <PlatformFooter />
     </div>
   );
 };
