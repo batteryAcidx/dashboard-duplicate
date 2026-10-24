@@ -1,7 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, ChevronDown, LogOut, RotateCcw } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { authApi, isConfigured, ownerApi } from '../api';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
+import { formatBlock, zonedToUtc } from '../lib/tz';
+import { AppHeader } from '../components/AppHeader';
+import { PlatformFooter } from '../components/PlatformFooter';
+import { inputCls as uiInputCls } from '../components/ui';
 
 // Keep in sync with Supabase: Authentication > Sign In / Providers > Email > Minimum password length
 const MIN_PASSWORD_LENGTH = 10;
@@ -55,25 +59,22 @@ function useSave() {
 }
 
 // 16px text on purpose: iPhones zoom the page when an input is smaller
-const inputCls =
-  "w-full bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-xl px-4 py-3 text-base font-['Inter'] text-slate-100 placeholder:text-slate-600 disabled:opacity-60";
+const inputCls = uiInputCls;
 
 /* ---------- building blocks ---------- */
 
 const SkeletonRows: React.FC<{ count: number }> = ({ count }) => (
-  <div className="space-y-3 animate-pulse" aria-hidden="true">
+  <div className="space-y-4 animate-pulse" aria-hidden="true">
     {Array.from({ length: count }).map((_, i) => (
-      <div key={i} className="h-16 rounded-xl bg-[#111625] border border-[#22283a]" />
+      <div key={i} className="h-[72px] rounded-2xl border border-white/[0.06] bg-[#0f1424]" />
     ))}
   </div>
 );
 
 const Group: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div>
-    <div className="mb-3 font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-500 font-semibold">
-      {label}
-    </div>
-    <div className="space-y-3">{children}</div>
+    <div className="mb-4 text-sm font-semibold text-slate-400">{label}</div>
+    <div className="space-y-4">{children}</div>
   </div>
 );
 
@@ -88,9 +89,7 @@ interface SectionProps {
 
 const Section: React.FC<SectionProps> = ({ id, title, summary, open, onToggle, children }) => (
   <section
-    className={`rounded-xl border bg-[#111625] transition-colors ${
-      open ? 'border-[#f59e0b]/40' : 'border-[#22283a]'
-    }`}
+    className={`rounded-2xl border bg-[#0f1424] transition-colors ${open ? 'border-[#f59e0b]/35' : 'border-white/[0.07]'}`}
   >
     <h2>
       <button
@@ -99,94 +98,66 @@ const Section: React.FC<SectionProps> = ({ id, title, summary, open, onToggle, c
         aria-expanded={open}
         aria-controls={`${id}-panel`}
         onClick={onToggle}
-        className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left cursor-pointer min-h-[64px]"
+        className="flex min-h-[76px] w-full cursor-pointer items-center justify-between gap-4 px-6 py-5 text-left"
       >
         <span className="min-w-0">
-          <span className="block font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight">{title}</span>
-          {!open && summary && <span className="block mt-0.5 text-sm text-slate-400 truncate">{summary}</span>}
+          <span className="block font-display text-lg font-semibold tracking-tight text-slate-100">{title}</span>
+          {!open && summary && <span className="mt-1 block truncate text-sm text-slate-400">{summary}</span>}
         </span>
-        <ChevronDown className={`w-5 h-5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-5 w-5 shrink-0 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
     </h2>
     {open && (
-      <div
-        id={`${id}-panel`}
-        role="region"
-        aria-labelledby={`${id}-header`}
-        className="px-5 pb-5 pt-5 space-y-5 border-t border-[#1b2336]"
-      >
+      <div id={`${id}-panel`} role="region" aria-labelledby={`${id}-header`} className="space-y-6 border-t border-white/[0.06] px-6 pb-7 pt-6">
         {children}
       </div>
     )}
   </section>
 );
 
-const Field: React.FC<{ id: string; label: string; hint?: string; children: React.ReactNode }> = ({
-  id,
-  label,
-  hint,
-  children,
-}) => (
-  <div className="space-y-2">
-    <label
-      htmlFor={id}
-      className="block font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-400 font-semibold"
-    >
+const Field: React.FC<{ id: string; label: string; hint?: string; children: React.ReactNode }> = ({ id, label, hint, children }) => (
+  <div>
+    <label htmlFor={id} className="mb-2 block text-sm font-medium text-slate-300">
       {label}
     </label>
     {children}
-    {hint && <p className="text-[13px] text-slate-400 leading-relaxed">{hint}</p>}
+    {hint && <p className="mt-2 text-[13px] leading-relaxed text-slate-500">{hint}</p>}
   </div>
 );
 
 const ReadRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-0.5 sm:gap-4">
-    <span className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-500 font-semibold sm:pt-0.5 shrink-0">
-      {label}
-    </span>
-    <span className="text-base text-slate-100 sm:text-right break-words min-w-0">{value || '—'}</span>
+  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+    <span className="shrink-0 text-sm text-slate-400">{label}</span>
+    <span className="min-w-0 break-words text-[15px] font-medium text-slate-100 sm:text-right">{value || '—'}</span>
   </div>
 );
 
-const SaveRow: React.FC<{ state: SaveState; onSave: () => void; label?: string }> = ({
-  state,
-  onSave,
-  label = 'Save changes',
-}) => (
-  <div className="pt-1 space-y-3">
+const SaveRow: React.FC<{ state: SaveState; onSave: () => void; label?: string }> = ({ state, onSave, label = 'Save changes' }) => (
+  <div className="space-y-3 pt-1">
     <button
       type="button"
       onClick={onSave}
       disabled={state.saving}
-      className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-['Space_Grotesk'] font-bold text-sm uppercase tracking-wider cursor-pointer disabled:opacity-50"
+      className="inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-xl bg-[#f59e0b] px-7 font-display text-sm font-bold text-[#150f05] transition-colors hover:bg-[#fbbf24] disabled:opacity-50 sm:w-auto"
     >
       {state.saving ? 'Saving…' : label}
     </button>
     {state.saved && (
-      <p role="status" className="font-['JetBrains_Mono'] text-sm text-[#ffc174]">
+      <p role="status" className="text-sm font-medium text-[#ffc174]">
         Saved
       </p>
     )}
     {state.error && (
-      <p role="alert" className="text-sm text-red-400 font-['Inter'] leading-relaxed">
+      <p role="alert" className="text-sm leading-relaxed text-red-400">
         {state.error}
       </p>
     )}
   </div>
 );
 
-const CheckRow: React.FC<{ checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }> = ({
-  checked,
-  onChange,
-  children,
-}) => (
-  <label className="flex items-center gap-3 cursor-pointer text-base text-slate-200 py-1.5">
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={(e) => onChange(e.target.checked)}
-      className="h-5 w-5 accent-[#f59e0b] shrink-0"
-    />
+const CheckRow: React.FC<{ checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }> = ({ checked, onChange, children }) => (
+  <label className="flex cursor-pointer items-center gap-3.5 py-1.5 text-[15px] text-slate-200">
+    <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-5 w-5 shrink-0 accent-[#f59e0b]" />
     <span>{children}</span>
   </label>
 );
@@ -204,6 +175,13 @@ interface Snap {
   weekends: boolean;
   jobCount: number;
   fullName: string;
+}
+
+interface BlockRow {
+  id: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string | null;
 }
 
 interface SettingsPageProps {
@@ -238,6 +216,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
   const [officeClose, setOfficeClose] = useState('17:00');
   const [weekends, setWeekends] = useState(false);
   const [jobInputs, setJobInputs] = useState<Record<string, string>>({});
+  const [bookExisting, setBookExisting] = useState(false);
+  const [savedBookExisting, setSavedBookExisting] = useState(false);
+  const [blocks, setBlocks] = useState<BlockRow[]>([]);
+  const [blockDate, setBlockDate] = useState('');
+  const [blockStart, setBlockStart] = useState('09:00');
+  const [blockEnd, setBlockEnd] = useState('17:00');
+  const [blockReason, setBlockReason] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -250,21 +235,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
   const [notifyState, runNotify] = useSave();
   const [businessState, runBusiness] = useSave();
   const [jobsState, runJobs] = useSave();
+  const [bookingState, runBooking] = useSave();
+  const [blockState, runBlock] = useSave();
   const [passwordState, runPassword] = useSave();
 
   const [open, setOpen] = useState<string | null>(null);
   const toggle = (key: string) => setOpen((o) => (o === key ? null : key));
-
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
 
   const goto = (path: string) => {
     if (onNavigate) onNavigate(path);
@@ -272,7 +248,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
   };
 
   const load = useCallback(async () => {
-    if (!isSupabaseConfigured) {
+    if (!isConfigured) {
       setLoadError('The dashboard is not connected to its database. Contact support.');
       setLoading(false);
       return;
@@ -280,8 +256,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     setLoading(true);
     setLoadError(null);
 
-    const { data: auth } = await supabase.auth.getUser();
-    const user = auth?.user;
+    const user = await authApi.currentUser();
     if (!user) {
       setLoadError('Please sign in again.');
       setLoading(false);
@@ -290,16 +265,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     setUserId(user.id);
     setLoginEmail(user.email || userEmail);
 
-    const [acc, prof, jv, cal] = await Promise.all([
-      supabase
-        .from('accounts')
-        .select(
-          'id, name, territory, timezone, service_area, services, office_open, office_close, works_weekends, notification_phone, quiet_start, quiet_end'
-        )
-        .maybeSingle(),
-      supabase.from('profiles').select('full_name, password_changed_at').eq('id', user.id).maybeSingle(),
-      supabase.from('job_values').select('job_type, typical_value'),
-      supabase.from('setup_steps').select('status').eq('step_key', 'calendar_connected').maybeSingle(),
+    const [acc, prof, jv, cal, eng, blk] = await Promise.all([
+      ownerApi.account.settings(),
+      ownerApi.settings.profile(user.id),
+      ownerApi.settings.jobValues(),
+      ownerApi.settings.calendarStep(),
+      ownerApi.settings.engine(),
+      ownerApi.settings.blocks(),
     ]);
 
     if (acc.error || !acc.data) {
@@ -333,6 +305,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     setFullName(prof.data?.full_name || '');
     setPwChangedAt(prof.data?.password_changed_at || null);
     setCalendarStatus(cal.data?.status || null);
+    setBookExisting(Boolean(eng.data?.book_existing_customers));
+    setSavedBookExisting(Boolean(eng.data?.book_existing_customers));
+    setBlocks(blk.error ? [] : ((blk.data as BlockRow[]) || []));
 
     const inputs: Record<string, string> = {};
     JOB_TYPES.forEach((j) => (inputs[j.key] = ''));
@@ -364,7 +339,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
   /* ---------- saving ---------- */
 
   const updateAccount = async (values: Record<string, unknown>): Promise<string | null> => {
-    const { data, error } = await supabase.from('accounts').update(values).eq('id', accountId).select('id');
+    const { data, error } = await ownerApi.account.update(accountId, values);
     if (error) return 'Could not save. Check your connection and try again.';
     if (!data || data.length !== 1) return 'Could not save. Please sign in again and retry.';
     return null;
@@ -374,11 +349,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     runProfile(async () => {
       const name = fullName.trim();
       if (name.length > 80) return 'That name is too long.';
-      const { data, error } = await supabase
-        .from('profiles')
-        .update({ full_name: name || null })
-        .eq('id', userId)
-        .select('id');
+      const { data, error } = await ownerApi.settings.updateProfile(userId, name || null);
       if (error || !data || data.length !== 1) return 'Could not save. Try again.';
       setSnap((s) => (s ? { ...s, fullName: name } : s));
       return null;
@@ -443,7 +414,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
         rows.push({ account_id: accountId, job_type: j.key, typical_value: Math.round(n) });
       }
       if (rows.length === 0) return 'Enter at least one value.';
-      const { error } = await supabase.from('job_values').upsert(rows, { onConflict: 'account_id,job_type' });
+      const { error } = await ownerApi.settings.saveJobValues(rows);
       if (error) return 'Could not save. Check your connection and try again.';
 
       const merged = { ...jobInputs };
@@ -455,6 +426,35 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       return null;
     });
 
+  const saveBooking = () =>
+    runBooking(async () => {
+      const { error } = await ownerApi.settings.setBookExisting(bookExisting);
+      if (error) return 'Could not save. Check your connection and try again.';
+      setSavedBookExisting(bookExisting);
+      return null;
+    });
+
+  const addBlock = () =>
+    runBlock(async () => {
+      if (!blockDate) return 'Choose a date.';
+      if (!blockStart || !blockEnd) return 'Choose a start and an end time.';
+      if (blockEnd <= blockStart) return 'The end time must be after the start time.';
+      const start = zonedToUtc(blockDate, blockStart, tz || 'America/Chicago');
+      const end = zonedToUtc(blockDate, blockEnd, tz || 'America/Chicago');
+      if (!start || !end) return 'That date or time is not valid.';
+      if (end.getTime() < Date.now()) return 'That time has already passed.';
+      const { data, error } = await ownerApi.settings.addBlock({ account_id: accountId, starts_at: start.toISOString(), ends_at: end.toISOString(), reason: blockReason.trim() || null });
+      if (error || !data || data.length !== 1) return 'Could not save. Check your connection and try again.';
+      setBlocks((prev) => [...prev, ...(data as BlockRow[])].sort((a, b) => a.starts_at.localeCompare(b.starts_at)));
+      setBlockReason('');
+      return null;
+    });
+
+  const removeBlock = async (id: string) => {
+    const { error } = await ownerApi.settings.removeBlock(id);
+    if (!error) setBlocks((prev) => prev.filter((b) => b.id !== id));
+  };
+
   const changePassword = () =>
     runPassword(async () => {
       if (newPassword.length < MIN_PASSWORD_LENGTH) {
@@ -462,7 +462,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
       }
       if (newPassword !== confirmPassword) return 'Passwords do not match.';
 
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      const error = await authApi.updatePassword(newPassword);
       if (error) {
         const msg = (error.message || '').toLowerCase();
         const code = (error as { code?: string }).code;
@@ -499,72 +499,35 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
     : '';
   const jobSummary = s ? (s.jobCount ? `${s.jobCount} of ${JOB_TYPES.length} values set` : 'Not set yet') : '';
   const calendarSummary = calendarStatus === 'done' ? 'Connected' : 'Set up during onboarding';
-  const initial = (loginEmail || userEmail || 'U').charAt(0).toUpperCase();
+  const bookingSummary = `${savedBookExisting ? 'Existing customers are booked' : 'Existing customers are flagged for you'}${
+    blocks.length ? ` · ${blocks.length} blocked time${blocks.length === 1 ? '' : 's'}` : ''
+  }`;
 
   return (
-    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-['Inter']">
-      {/* compact header */}
-      <div className="mx-auto max-w-5xl px-4 sm:px-6 pt-5 pb-3 flex items-center justify-between gap-4">
-        <span className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight truncate">
-          {companyName}
-        </span>
-        <div className="relative" ref={menuRef}>
-          <button
-            type="button"
-            onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#111728] border border-[#212b42] text-slate-300 text-xs"
-            aria-expanded={menuOpen}
-            aria-label="Account menu"
-          >
-            <span className="w-6 h-6 rounded-full bg-[#1e273d] border border-[#2d3a5a] flex items-center justify-center text-[11px] font-bold text-[#ffc174] shrink-0 sm:hidden">
-              {initial}
-            </span>
-            <span className="max-w-[160px] truncate hidden sm:inline">{loginEmail}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#0f1422] border border-[#222c42] py-1.5 z-50">
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  goto('/queue');
-                }}
-                className="w-full px-4 py-3 text-sm text-slate-300 hover:text-white hover:bg-[#192236] text-left"
-              >
-                Dashboard
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onSignOut?.();
-                }}
-                className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-300 hover:text-red-400 hover:bg-[#192236] text-left"
-              >
-                <LogOut className="w-4 h-4" />
-                Sign out
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-body">
+      <AppHeader
+        companyName={companyName}
+        userEmail={loginEmail || userEmail}
+        current="settings"
+        onNavigate={onNavigate}
+        onSignOut={onSignOut}
+      />
 
       <main className="mx-auto max-w-5xl px-4 sm:px-6 pb-[max(5rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={() => goto('/queue')}
-          className="inline-flex items-center gap-1.5 mt-3 -ml-1 pl-1 pr-3 py-2.5 text-sm font-['Space_Grotesk'] font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 mt-3 -ml-1 pl-1 pr-3 py-2.5 text-sm font-display font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 text-[#ffc174]" />
           Dashboard
         </button>
 
-                <div className="mt-5 mb-7">
-          <span className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#f59e0b] font-bold block mb-2">
-            ACCOUNT
+                <div className="mb-10 mt-8">
+          <span className="font-body text-xs tracking-wide text-[#f59e0b] font-bold block mb-2">
+            Account
           </span>
-          <h1 className="font-['Space_Grotesk'] text-3xl sm:text-4xl font-black uppercase tracking-tight text-slate-100 leading-none">
+          <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-100 leading-none">
             Settings
           </h1>
         </div>
@@ -582,7 +545,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
             <button
               type="button"
               onClick={load}
-              className="inline-flex items-center gap-1.5 px-5 py-3 rounded-xl bg-[#f59e0b] text-[#150f05] font-['Space_Grotesk'] font-bold text-sm uppercase tracking-wider cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-5 py-3 rounded-xl bg-[#f59e0b] text-[#150f05] font-display font-bold text-sm tracking-wide cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               Retry
@@ -592,7 +555,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
           <>
           
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-2">
               <Group label="Your business">
                 <Section
                   id="notifications"
@@ -723,7 +686,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
                   {JOB_TYPES.map((j) => (
                     <Field key={j.key} id={`jv-${j.key}`} label={j.label} hint={j.hint}>
                       <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-['JetBrains_Mono'] text-base text-slate-400 pointer-events-none">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-data text-base text-slate-400 pointer-events-none">
                           $
                         </span>
                         <input
@@ -756,10 +719,89 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
                   <button
                     type="button"
                     onClick={() => goto('/setup')}
-                    className="px-5 py-3 rounded-xl bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-200 font-['Space_Grotesk'] font-bold text-sm uppercase tracking-wider cursor-pointer w-full sm:w-auto"
+                    className="px-5 py-3 rounded-xl bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-200 font-display font-bold text-sm tracking-wide cursor-pointer w-full sm:w-auto"
                   >
                     See setup progress
                   </button>
+                </Section>
+
+                <Section
+                  id="booking"
+                  title="Contacts and booking"
+                  summary={bookingSummary}
+                  open={open === 'booking'}
+                  onToggle={() => toggle('booking')}
+                >
+                  <p className="text-[13px] text-slate-400 leading-relaxed">
+                    Homeowners are always booked for an inspection. Vendors and existing customers are flagged, and you get their details by
+                    text, so your calendar stays full of real jobs.
+                  </p>
+                  <div className="space-y-2">
+                    <CheckRow checked={bookExisting} onChange={setBookExisting}>
+                      Also book my past and recurring customers
+                    </CheckRow>
+                    <p className="text-[13px] text-slate-400 leading-relaxed">
+                      Off by default. When it is off, a past customer who calls is greeted by name and flagged for you, never offered an
+                      inspection time.
+                    </p>
+                  </div>
+                  <SaveRow state={bookingState} onSave={saveBooking} />
+
+                  <div className="pt-2 border-t border-[#1b2336] space-y-4">
+                    <div className="pt-4">
+                      <div className="font-body text-xs tracking-wide text-slate-400 font-semibold mb-1">
+                        Blocked times
+                      </div>
+                      <p className="text-[13px] text-slate-400 leading-relaxed">
+                        Times we should never offer for an inspection, like a day off or a crew meeting. Times are in your time zone
+                        {tz ? ` (${tz.replace(/_/g, ' ')})` : ''}.
+                      </p>
+                    </div>
+                    {blocks.length > 0 && (
+                      <ul className="divide-y divide-[#1b2336] rounded-xl border border-[#22283a] bg-[#0e1322] px-4">
+                        {blocks.map((b) => (
+                          <li key={b.id} className="flex items-center justify-between gap-3 py-3">
+                            <span className="min-w-0 text-sm text-slate-200">
+                              {formatBlock(b.starts_at, b.ends_at, tz || 'America/Chicago')}
+                              {b.reason ? <span className="block text-[13px] text-slate-400">{b.reason}</span> : null}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeBlock(b.id)}
+                              className="shrink-0 px-2.5 py-1.5 rounded-lg font-data text-xs text-slate-500 hover:text-red-400 cursor-pointer"
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <Field id="block-date" label="Date">
+                        <input id="block-date" type="date" value={blockDate} onChange={(e) => setBlockDate(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls} />
+                      </Field>
+                      <Field id="block-start" label="From">
+                        <input id="block-start" type="time" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls} />
+                      </Field>
+                      <Field id="block-end" label="Until">
+                        <input id="block-end" type="time" value={blockEnd} onChange={(e) => setBlockEnd(e.target.value)} style={{ colorScheme: 'dark' }} className={inputCls} />
+                      </Field>
+                    </div>
+                    <Field id="block-reason" label="Reason (optional)">
+                      <input id="block-reason" type="text" value={blockReason} onChange={(e) => setBlockReason(e.target.value)} maxLength={200} placeholder="Day off" className={inputCls} />
+                    </Field>
+                    <SaveRow state={blockState} onSave={addBlock} label="Block this time" />
+                  </div>
+
+                  <div className="pt-2 border-t border-[#1b2336]">
+                    <button
+                      type="button"
+                      onClick={() => goto('/contacts')}
+                      className="mt-4 px-5 py-3 rounded-xl bg-[#111728] border border-[#212b42] hover:border-[#314060] text-slate-200 font-display font-bold text-sm tracking-wide cursor-pointer w-full sm:w-auto"
+                    >
+                      Manage contacts
+                    </button>
+                  </div>
                 </Section>
               </Group>
 
@@ -875,7 +917,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
             <button
               type="button"
               onClick={() => onSignOut?.()}
-              className="sm:hidden mt-8 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl border border-[#222c42] text-slate-300 text-sm font-['Space_Grotesk'] font-bold uppercase tracking-wider cursor-pointer"
+              className="sm:hidden mt-8 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl border border-[#222c42] text-slate-300 text-sm font-display font-bold tracking-wide cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               Sign out
@@ -883,6 +925,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onSignOu
           </>
         )}
       </main>
+      <PlatformFooter />
     </div>
   );
 };

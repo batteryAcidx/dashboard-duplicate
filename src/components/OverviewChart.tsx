@@ -12,12 +12,12 @@ export const OverviewChart: React.FC<{ chart: ChartData }> = ({ chart }) => {
     <section aria-label="Missed calls and bookings" className="rounded-xl bg-[#0e1322] border border-[#252939] p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="font-['Space_Grotesk'] text-base font-bold text-slate-100 tracking-tight">
+          <h3 className="font-display text-base font-bold text-slate-100 tracking-tight">
             Missed calls and bookings
           </h3>
           <p className="mt-0.5 text-xs text-slate-400">{unit === 'hour' ? 'By hour' : 'By day'}</p>
         </div>
-        <div className="flex items-center gap-4 text-xs text-slate-300 font-['JetBrains_Mono']">
+        <div className="flex items-center gap-4 text-xs text-slate-300 font-data">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-sm bg-[#3a4766]" />
             Missed
@@ -35,7 +35,7 @@ export const OverviewChart: React.FC<{ chart: ChartData }> = ({ chart }) => {
         <>
           <div className="mt-5 flex gap-2">
             <div
-              className="relative w-6 shrink-0 h-40 sm:h-48 text-right font-['JetBrains_Mono'] text-xs text-slate-500"
+              className="relative w-6 shrink-0 h-40 sm:h-48 text-right font-data text-xs text-slate-500"
               aria-hidden="true"
             >
               <span className="absolute right-0 top-0 -translate-y-1/2">{top}</span>
@@ -86,7 +86,7 @@ export const OverviewChart: React.FC<{ chart: ChartData }> = ({ chart }) => {
                 {buckets.map((b) => (
                   <div key={b.key} className="relative flex-1 min-w-0 h-5">
                     {b.showLabel && (
-                      <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap font-['JetBrains_Mono'] text-xs text-slate-400">
+                      <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap font-data text-xs text-slate-400">
                         {b.label}
                       </span>
                     )}
@@ -96,7 +96,7 @@ export const OverviewChart: React.FC<{ chart: ChartData }> = ({ chart }) => {
             </div>
           </div>
 
-          <p aria-live="polite" className="mt-3 min-h-[20px] text-sm text-slate-300 font-['JetBrains_Mono']">
+          <p aria-live="polite" className="mt-3 min-h-[20px] text-sm text-slate-300 font-data">
             {sel
               ? `${sel.title} · ${sel.captured} missed · ${sel.booked} booked`
               : `${totalCaptured} missed · ${totalBooked} booked`}

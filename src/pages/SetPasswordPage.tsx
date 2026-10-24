@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Eye, EyeOff, AlertTriangle, CheckCircle2, Check, X, ArrowRight } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { authApi } from '../api';
 
 // Keep this in sync with Supabase: Authentication > Sign In / Providers > Email > Minimum password length
 const MIN_PASSWORD_LENGTH = 10;
@@ -35,21 +35,21 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
   const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (!authApi.isConfigured) {
       setHasValidSession(false);
       return;
     }
 
     let isMounted = true;
 
-    const applySession = (session: { user?: { last_sign_in_at?: string | null } } | null) => {
+    const applySession = (session: { user: { lastSignInAt: string | null } | null } | null) => {
       if (!session) return false;
       setHasValidSession(true);
       if (INITIAL_LINK_TYPE === 'invite') {
         setIsInvite(true);
       } else if (INITIAL_LINK_TYPE === 'recovery') {
         setIsInvite(false);
-      } else if (session.user && !session.user.last_sign_in_at) {
+      } else if (session.user && !session.user.lastSignInAt) {
         // fallback when the link type could not be read
         setIsInvite(true);
       }
@@ -57,7 +57,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
     };
 
     // Check existing session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    authApi.getSession().then(({ session, error }) => {
       if (!isMounted) return;
       if (error || !session) {
         // If there's a token in the address, give Supabase a moment to process it
@@ -76,7 +76,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
     });
 
     // React directly to Supabase Auth state events
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const stopListening = authApi.onChange((event, session) => {
       if (!isMounted) return;
 
       if (event === 'PASSWORD_RECOVERY') {
@@ -97,7 +97,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
     return () => {
       isMounted = false;
       clearTimeout(timeout);
-      subscription.unsubscribe();
+      stopListening();
     };
   }, []);
 
@@ -120,19 +120,19 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
 
     setIsLoading(true);
 
-    if (!isSupabaseConfigured) {
+    if (!authApi.isConfigured) {
       setIsLoading(false);
       setErrorMessage('The dashboard is not connected to its database. Contact support.');
       return;
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      const error = await authApi.updatePassword(password);
 
       if (error) {
         const msg = (error.message || '').toLowerCase();
-        const code = (error as { code?: string }).code;
-        const status = (error as { status?: number }).status;
+        const code = error.code;
+        const status = error.status;
 
         // The link/session is gone: show the expired screen
         if (
@@ -184,7 +184,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
           <div className="w-12 h-12 rounded-2xl bg-[#252939] border border-[#f59e0b]/50 flex items-center justify-center shadow-sm">
             <div className="w-5 h-5 border-2 border-[#f59e0b] border-t-transparent rounded-full animate-spin" />
           </div>
-          <p className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-400 font-bold">
+          <p className="font-body text-xs tracking-wide text-slate-400 font-bold">
             Checking your link…
           </p>
         </div>
@@ -226,16 +226,16 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
 
             {/* Wordmark */}
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
-              <span className="font-['Space_Grotesk'] text-xl sm:text-3xl uppercase tracking-tight text-slate-100 font-black">
+              <span className="font-display text-xl sm:text-3xl tracking-tight text-slate-100 font-extrabold">
                 WEDGE<span className="text-[#ffc174]">SCALE</span>
               </span>
-              <span className="font-['JetBrains_Mono'] text-[10px] sm:text-sm font-bold uppercase tracking-widest text-[#ffc174] bg-[#252939] border border-[#ffc174]/40 px-2 sm:px-2.5 py-0.5 rounded-lg shadow-sm">
+              <span className="font-body text-[11px] sm:text-sm font-bold tracking-wide text-[#ffc174] bg-[#252939] border border-[#ffc174]/40 px-2 sm:px-2.5 py-0.5 rounded-lg shadow-sm">
                 {isInvite ? 'ONBOARDING' : 'SECURITY'}
               </span>
             </div>
 
             {/* Dynamic Situation Line */}
-            <p className="font-['Inter'] text-xs sm:text-sm text-slate-400 mt-3 sm:mt-4 text-center max-w-sm leading-relaxed text-pretty font-medium">
+            <p className="font-body text-xs sm:text-sm text-slate-400 mt-3 sm:mt-4 text-center max-w-sm leading-relaxed text-pretty font-medium">
               {isExpired
                 ? 'This access link is no longer valid.'
                 : isSuccess
@@ -255,10 +255,10 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                   <AlertTriangle className="w-4 h-4" />
                 </div>
                 <div className="space-y-1">
-                  <p className="font-['Space_Grotesk'] text-sm font-bold text-slate-200 uppercase tracking-wide">
+                  <p className="font-display text-sm font-bold text-slate-200 tracking-wide">
                     Link Expired
                   </p>
-                  <p className="font-['Inter'] text-xs sm:text-sm text-slate-400 leading-relaxed">
+                  <p className="font-body text-xs sm:text-sm text-slate-400 leading-relaxed">
                     This security link has expired or has already been used. Please request a new link to continue.
                   </p>
                 </div>
@@ -268,16 +268,16 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                 <button
                   type="button"
                   onClick={() => handleNavigate('/forgot-password')}
-                  className="w-full inline-flex items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-['Space_Grotesk'] text-xs sm:text-base font-black uppercase tracking-widest text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60"
+                  className="w-full inline-flex items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-display text-xs sm:text-base font-extrabold tracking-wide text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60"
                 >
-                  REQUEST NEW LINK
+                  Request a new link
                 </button>
 
                 <div className="text-center pt-1">
                   <button
                     type="button"
                     onClick={() => handleNavigate('/login')}
-                    className="font-['JetBrains_Mono'] text-xs text-slate-400 hover:text-[#ffc174] transition-colors uppercase tracking-[0.16em] cursor-pointer"
+                    className="font-body text-xs text-slate-400 hover:text-[#ffc174] transition-colors tracking-[0.16em] cursor-pointer"
                   >
                     Back to Log In
                   </button>
@@ -292,10 +292,10 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                   <CheckCircle2 className="w-4 h-4 text-[#f59e0b]" />
                 </div>
                 <div className="space-y-1">
-                  <p className="font-['Space_Grotesk'] text-sm font-bold text-slate-200 uppercase tracking-wide">
+                  <p className="font-display text-sm font-bold text-slate-200 tracking-wide">
                     Password Set
                   </p>
-                  <p className="font-['Inter'] text-xs sm:text-sm text-slate-400 leading-relaxed">
+                  <p className="font-body text-xs sm:text-sm text-slate-400 leading-relaxed">
                     Your password has been updated. You can now access your live dispatch queue.
                   </p>
                 </div>
@@ -305,9 +305,9 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                 <button
                   type="button"
                   onClick={() => handleNavigate('/queue')}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-['Space_Grotesk'] text-xs sm:text-base font-black uppercase tracking-widest text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-display text-xs sm:text-base font-extrabold tracking-wide text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60"
                 >
-                  OPEN DASHBOARD
+                  Open dashboard
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
@@ -316,7 +316,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
             /* Set Password Form */
             <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6 pt-1 sm:pt-2">
               {errorMessage && (
-                <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-['Inter'] leading-relaxed shadow-sm">
+                <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs sm:text-sm font-body leading-relaxed shadow-sm">
                   {errorMessage}
                 </div>
               )}
@@ -325,7 +325,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
               <div className="space-y-2 text-left">
                 <label
                   htmlFor="new-password"
-                  className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300"
+                  className="block font-body text-xs font-bold tracking-[0.16em] text-slate-300"
                 >
                   New Password
                 </label>
@@ -340,7 +340,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="w-full pl-11 pr-11 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-base sm:text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 transition-colors"
+                    className="w-full pl-11 pr-11 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-base sm:text-sm font-body text-slate-100 placeholder:text-slate-600 transition-colors"
                   />
                   <button
                     type="button"
@@ -357,7 +357,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
               <div className="space-y-2 text-left">
                 <label
                   htmlFor="confirm-password"
-                  className="block font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-[0.16em] text-slate-300"
+                  className="block font-body text-xs font-bold tracking-[0.16em] text-slate-300"
                 >
                   Confirm Password
                 </label>
@@ -372,7 +372,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="w-full pl-11 pr-11 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-xs sm:text-sm font-['Inter'] text-slate-100 placeholder:text-slate-600 transition-colors"
+                    className="w-full pl-11 pr-11 py-3 sm:py-4 bg-[#0a0e1a] border border-[#272e42] focus:border-[#f59e0b] focus:outline-none rounded-xl text-xs sm:text-sm font-body text-slate-100 placeholder:text-slate-600 transition-colors"
                   />
                   <button
                     type="button"
@@ -387,10 +387,10 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
 
               {/* Password Rules */}
               <div className="p-3.5 rounded-xl bg-[#0a0e1a] border border-[#272e42]/80 space-y-2 text-left">
-                <div className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                <div className="font-body text-[11px] tracking-wide text-slate-400 font-bold">
                   Password Requirements
                 </div>
-                <div className="space-y-1.5 font-['Inter'] text-xs">
+                <div className="space-y-1.5 font-body text-xs">
                   <div className="flex items-center gap-2">
                     {hasMinLength ? (
                       <Check className="w-3.5 h-3.5 text-[#ffc174]" />
@@ -421,7 +421,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                 <button
                   type="submit"
                   disabled={isLoading || !hasMinLength}
-                  className="w-full inline-flex items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-['Space_Grotesk'] text-xs sm:text-base font-black uppercase tracking-widest text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60 disabled:opacity-50"
+                  className="w-full inline-flex items-center justify-center rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-display text-xs sm:text-base font-extrabold tracking-wide text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60 disabled:opacity-50"
                 >
                   {isLoading
                     ? 'SAVING PASSWORD...'
@@ -435,7 +435,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
                   <button
                     type="button"
                     onClick={() => handleNavigate('/login')}
-                    className="font-['JetBrains_Mono'] text-xs text-slate-400 hover:text-[#ffc174] transition-colors uppercase tracking-[0.16em] cursor-pointer"
+                    className="font-body text-xs text-slate-400 hover:text-[#ffc174] transition-colors tracking-[0.16em] cursor-pointer"
                   >
                     Back to Log In
                   </button>
@@ -448,7 +448,7 @@ export const SetPasswordPage: React.FC<SetPasswordPageProps> = ({ onNavigate }) 
 
       {/* Bottom Footer Line */}
       <div className="w-full text-center z-10 pt-8 pb-2">
-        <p className="font-['JetBrains_Mono'] text-xs text-slate-500 uppercase tracking-widest">
+        <p className="font-body text-xs text-slate-500 tracking-wide">
           WedgeScale Dashboard Platform
         </p>
       </div>

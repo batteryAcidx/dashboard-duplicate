@@ -1,12 +1,17 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, LogOut, RotateCcw } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import React, { useCallback, useEffect, useState } from 'react';
+import { RotateCcw } from 'lucide-react';
+import { accessApi, isConfigured, ownerApi } from '../api';
 import { NotFoundPage } from './NotFoundPage';
 import { DashboardBody, DashboardLead, DashboardStats, WindowKey } from '../components/DashboardBody';
 import { LeadStatus } from '../components/LeadStatusControl';
 import { buildChart } from '../lib/chart';
+import { AppHeader } from '../components/AppHeader';
+import { PlatformFooter } from '../components/PlatformFooter';
 import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
+import {
+  ContactType, activeUrgency, buildDetails, compareByUrgency, eventLabel, isCountedLead, normalizeType, whyWithYou,
+} from '../lib/leadView';
 
 /* ---------- time helpers (use the ACCOUNT's time zone, not the browser's) ---------- */
 
@@ -74,9 +79,20 @@ interface LeadRow {
   missed_call_at: string | null;
   response_seconds: number | null;
   created_at: string;
+  urgency?: string | null;
+  urgency_reason?: string | null;
+  contact_type?: string | null;
+  phone_e164?: string | null;
   appointments: { starts_at: string; status: string }[];
   attachments: { id: string }[];
   messages: { sent_at: string }[];
+}
+
+interface LeadStateRow {
+  lead_id: string;
+  stage: string | null;
+  collected: Record<string, unknown> | null;
+  handoff_reason: string | null;
 }
 
 interface MessageRow {
@@ -107,15 +123,6 @@ interface Thread {
   events: EventRow[];
 }
 
-function eventText(e: EventRow): string {
-  const d = e.detail || '';
-  if (e.actor === 'owner') {
-    if (d.startsWith('Marked ')) return 'You marked this ' + d.slice('Marked '.length);
-    if (d.startsWith('Job value updated to')) return 'You updated the job value to' + d.slice('Job value updated to'.length);
-  }
-  return d;
-}
-
 interface QueuePageProps {
   onNavigate?: (path: string) => void;
   onSignOut?: () => void;
@@ -135,23 +142,14 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   const [accountStatus, setAccountStatus] = useState('live');
   const [rows, setRows] = useState<LeadRow[]>([]);
   const [threads, setThreads] = useState<Record<string, Thread>>({});
+  const [states, setStates] = useState<Record<string, LeadStateRow>>({});
+  const [reviewPhones, setReviewPhones] = useState<Set<string>>(new Set());
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(selectedConversationId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const [windowKey, setWindowKey] = useState<WindowKey>('7d');
   const [isAdmin, setIsAdmin] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
-
-  /* close the account menu on outside click */
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
 
   useEffect(() => {
     setSelectedLeadId(selectedConversationId);
@@ -159,11 +157,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
 
   /* account name and time zone (row-level security returns only the user's own account) */
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    supabase
-      .from('accounts')
-            .select('name, timezone, status')
-      .maybeSingle()
+    if (!isConfigured) return;
+    ownerApi.account.summary()
       .then(({ data }) => {
         if (data?.name) {
           setCompanyName(data.name);
@@ -175,10 +170,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    supabase
-      .from('job_values')
-      .select('job_type, typical_value')
+    if (!isConfigured) return;
+    ownerApi.settings.jobValues()
       .then(({ data }) => {
         const map: Record<string, number> = {};
         (data || []).forEach((r: { job_type: string; typical_value: number }) => {
@@ -190,46 +183,60 @@ export const QueuePage: React.FC<QueuePageProps> = ({
 
   // admins get a link to the admin page; an admin login with no client account goes straight there
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isConfigured) return;
     (async () => {
-      const { data: adminRow } = await supabase.from('admins').select('user_id').maybeSingle();
-      if (!adminRow) return;
+      if (!(await accessApi.isAdmin())) return;
       setIsAdmin(true);
-      const { data: profiles } = await supabase.from('profiles').select('id').limit(1);
-      if (!profiles || profiles.length === 0) {
+      if (!(await accessApi.hasClientAccount())) {
         if (onNavigate) onNavigate('/admin');
         else window.location.assign('/admin');
       }
     })();
   }, []);
 
+  /* extras for the list: what the assistant learned, and which numbers are waiting to be confirmed.
+     A problem here never hides the leads themselves. */
+  const loadExtras = useCallback(async () => {
+    const [st, ct] = await Promise.all([
+      ownerApi.leads.states(),
+      ownerApi.leads.numbersToConfirm(),
+    ]);
+    if (!st.error) {
+      const map: Record<string, LeadStateRow> = {};
+      ((st.data as LeadStateRow[]) || []).forEach((x) => (map[x.lead_id] = x));
+      setStates(map);
+    }
+    if (!ct.error) {
+      setReviewPhones(new Set(((ct.data as { phone_e164: string }[]) || []).map((x) => x.phone_e164)));
+    }
+  }, []);
+
   /* leads list (light query: no message bodies) */
   const loadLeads = useCallback(async (silent = false) => {
-    if (!isSupabaseConfigured) {
+    if (!isConfigured) {
       setError('The dashboard is not connected to its database. Contact support.');
       setLoading(false);
       return;
     }
     if (!silent) setLoading(true);
-    const { data, error: err } = await supabase
-      .from('leads')
-      .select('*, appointments(starts_at, status), attachments(id), messages(sent_at)');
+    const { data, error: err } = await ownerApi.leads.list();
     if (err) {
       if (!silent) setError(err.message || 'Failed to load conversations.');
     } else {
       setError(null);
       setRows((data as unknown as LeadRow[]) || []);
       setLastUpdated(Date.now());
+      loadExtras();
     }
     setLoading(false);
-  }, []);
+  }, [loadExtras]);
 
   /* one thread */
     const loadThread = useCallback(async (leadId: string) => {
     const [m, a, ev] = await Promise.all([
-      supabase.from('messages').select('id, sender, body, sent_at').eq('lead_id', leadId).order('sent_at', { ascending: true }),
-      supabase.from('attachments').select('id, message_id, file_name, size_bytes').eq('lead_id', leadId),
-      supabase.from('lead_events').select('id, event_type, detail, actor, created_at').eq('lead_id', leadId).order('created_at', { ascending: true }),
+      ownerApi.leads.messages(leadId),
+      ownerApi.leads.attachments(leadId),
+      ownerApi.leads.events(leadId),
     ]);
     if (!m.error && !a.error) {
       setThreads((prev) => ({
@@ -281,7 +288,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   /* mark a lead read (one place only) */
   const markRead = useCallback(async (id: string) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, unread: false } : r)));
-    await supabase.from('leads').update({ unread: false }).eq('id', id);
+    await ownerApi.leads.markRead(id);
   }, []);
 
   /* a lead opened straight from the address bar should also be marked read */
@@ -323,11 +330,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       )
     );
 
-    const { error: err } = await supabase.rpc('change_lead_status', {
-      p_lead_id: id,
-      p_status: status,
-      p_final_value: nextValue,
-    });
+    const { error: err } = await ownerApi.leads.changeStatus(id, status, nextValue);
 
     if (err) {
       // put it back if it did not save
@@ -350,31 +353,23 @@ export const QueuePage: React.FC<QueuePageProps> = ({
     return null;
   };
 
-  /* ---------- map rows to what DashboardBody expects ---------- */
-
-  const ACTIVE_STATUSES = ['booked', 'following_up', 'needs_you'];
-
-  // priority only counts while the lead is still urgent
-  const isPriorityActive = (r: LeadRow): boolean => {
-    if (!r.priority || !ACTIVE_STATUSES.includes(r.status)) return false;
-    const open = r.appointments.filter((a) => a.status !== 'cancelled');
-    if (open.length > 0) {
-      const now = Date.now();
-      // every appointment is in the past: the urgent moment is over
-      if (!open.some((a) => new Date(a.starts_at).getTime() >= now)) return false;
-    }
-    return true;
+  const handleChangeType = async (id: string, type: ContactType): Promise<string | null> => {
+    if (!rows.some((r) => r.id === id)) return 'Lead not found.';
+    const { error: err } = await ownerApi.leads.setType(id, type);
+    if (err) return 'Could not save. Check your connection and try again.';
+    // the status can change with the type (vendors are filed as not a lead), so reload everything
+    await Promise.all([loadLeads(true), loadThread(id)]);
+    return null;
   };
+
+  /* ---------- map rows to what DashboardBody expects ---------- */
 
   const latest = (r: LeadRow) =>
     r.messages.reduce((mx, m) => (m.sent_at > mx ? m.sent_at : mx), r.missed_call_at || r.created_at);
 
-  const sortedRows = [...rows].sort((a, b) => {
-    const pa = isPriorityActive(a);
-    const pb = isPriorityActive(b);
-    if (pa !== pb) return pa ? -1 : 1;
-    return latest(b).localeCompare(latest(a));
-  });
+  // emergencies first, then urgent, then everything else, newest first inside each group
+  const urgencyNow = (r: LeadRow) => activeUrgency(r);
+  const sortedRows = [...rows].sort((a, b) => compareByUrgency(urgencyNow(a), urgencyNow(b), latest(a), latest(b)));
 
   const leads: DashboardLead[] = sortedRows.map((r) => {
     const appt = [...r.appointments]
@@ -383,6 +378,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
     const when = appt ? new Date(appt.starts_at) : null;
     const thread = threads[r.id];
     const place = [r.address, r.city].filter(Boolean).join(', ');
+    const type = normalizeType(r.contact_type);
+    const learned = states[r.id];
 
     let transcript: DashboardLead['chatTranscript'] = [];
     if (thread) {
@@ -418,7 +415,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
                 ? ('support' as const)
                 : ('system' as const),
             sender: 'wedge' as const,
-            text: eventText(it.e),
+            text: eventLabel(it.e),
             time: clock(it.at, tz),
             dayDivider,
           };
@@ -445,7 +442,13 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       phone: r.phone || '',
       address: place || 'No address provided',
       timeAgo: ago(latest(r)),
-      priority: isPriorityActive(r),
+      priority: urgencyNow(r) !== 'normal',
+      urgency: urgencyNow(r),
+      urgencyReason: r.urgency_reason || undefined,
+      contactType: type,
+      needsReview: Boolean(r.phone_e164 && reviewPhones.has(r.phone_e164)),
+      details: buildDetails({ collected: learned?.collected ?? null, photoCount: r.attachments.length }),
+      whyWithYou: whyWithYou(learned?.handoff_reason, type),
       unread: r.unread,
       status: (r.status as LeadStatus) || 'booked',
       finalValue: r.final_value,
@@ -455,7 +458,13 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       missedCallTime: missedLabel,
       conversationTag: {
         icon: 'calendar',
-        label: when ? `Booked ${relDay(when, tz)} ${shortClock(appt!.starts_at, tz)}` : 'Not booked yet',
+        label: when
+          ? `Booked ${relDay(when, tz)} ${shortClock(appt!.starts_at, tz)}`
+          : type === 'supplier' || type === 'crew' || type === 'other'
+          ? 'Vendor, not booked'
+          : type === 'past_client' || type === 'recurring_client'
+          ? 'Flagged for you'
+          : 'Not booked yet',
       },
       secondaryTag: r.attachments.length
         ? { icon: 'photos', label: `${r.attachments.length} ${r.attachments.length === 1 ? 'Photo' : 'Photos'}` }
@@ -487,9 +496,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   const windowLabel =
     windowKey === '24h' ? 'Last 24 hours' : windowKey === '7d' ? 'Last 7 days' : 'Last 30 days';
     // "Not a lead" (vendors, existing customers, spam) is not a missed lead
-  const captured = rows.filter(
-    (r) => r.status !== 'not_a_lead' && new Date(r.missed_call_at || r.created_at).getTime() >= cutoff
-  );
+  // only homeowners count: vendors and existing customers are flagged for you, not part of the booking numbers
+  const captured = rows.filter((r) => isCountedLead(r) && new Date(r.missed_call_at || r.created_at).getTime() >= cutoff);
   // a lead marked Lost is no longer pipeline
   const booked = captured.filter(
     (r) => r.status !== 'lost' && r.appointments.some((a) => a.status !== 'cancelled')
@@ -507,7 +515,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
       : 'No missed calls in this period.',
   };
 
-    const chart = buildChart(rows, windowKey, tz);
+    const chart = buildChart(rows.filter(isCountedLead), windowKey, tz);
 
   /* ---------- render ---------- */
 
@@ -516,86 +524,30 @@ export const QueuePage: React.FC<QueuePageProps> = ({
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-['Inter']">
+    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-body">
           <PullIndicator pull={pull} lastUpdated={lastUpdated} />
-      {/* compact header */}
-      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-9 pt-5 pb-3 flex items-center justify-between gap-4">
-        <span className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight truncate">
-          {companyName}
-        </span>
-        <div className="flex items-center gap-3">
-  {accountStatus === 'setup' && (
-    <button
-      type="button"
-      onClick={() => (onNavigate ? onNavigate('/setup') : window.location.assign('/setup'))}
-      className="px-3 py-1.5 rounded-lg bg-[#1a1710] border border-[#f59e0b]/40 text-[#ffc174] font-['JetBrains_Mono'] text-[11px] uppercase tracking-wider cursor-pointer"
-    >
-      Setup progress
-    </button>
-  )}
-
-  <div className="hidden sm:flex items-center gap-2 font-['JetBrains_Mono'] text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-    <span className="h-1.5 w-1.5 rounded-full bg-[#ffc174] animate-pulse" />
-    <span>Refreshes every 60s</span>
-  </div>
-          <div className="relative" ref={menuRef}>
+      <AppHeader
+        companyName={companyName}
+        userEmail={userEmail}
+        current="dashboard"
+        isAdmin={isAdmin}
+        onNavigate={onNavigate}
+        onSignOut={onSignOut}
+        extra={
+          accountStatus === 'setup' ? (
             <button
               type="button"
-              onClick={() => setMenuOpen((v) => !v)}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#111728] border border-[#212b42] text-slate-300 text-xs"
-              aria-expanded={menuOpen}
+              onClick={() => (onNavigate ? onNavigate('/setup') : window.location.assign('/setup'))}
+              className="hidden h-11 cursor-pointer items-center rounded-xl border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-4 text-sm font-semibold text-[#ffc174] transition-colors hover:bg-[#f59e0b]/15 sm:inline-flex"
             >
-                            <span className="w-6 h-6 rounded-full bg-[#1e273d] border border-[#2d3a5a] flex items-center justify-center text-[11px] font-bold text-[#ffc174] shrink-0 sm:hidden">
-                {(userEmail || 'U').charAt(0).toUpperCase()}
-              </span>
-              <span className="max-w-[140px] truncate hidden sm:inline">{userEmail}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              Setup progress
             </button>
-              {menuOpen && (
-              <div className="absolute right-0 mt-2 w-52 rounded-xl bg-[#0f1422] border border-[#222c42] py-1.5 z-50">
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      if (onNavigate) onNavigate('/admin');
-                      else window.location.assign('/admin');
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-[#ffc174] hover:bg-[#192236] text-left"
-                  >
-                    Admin
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    if (onNavigate) onNavigate('/settings');
-                    else window.location.assign('/settings');
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-300 hover:text-white hover:bg-[#192236] text-left"
-                >
-                  Settings
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onSignOut?.();
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-300 hover:text-red-400 hover:bg-[#192236] text-left"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  Sign out
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+          ) : null
+        }
+      />
 
       {loading ? (
-        <div className="py-24 text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-slate-400">
+        <div className="py-24 text-center font-body text-xs tracking-wide text-slate-400">
           Loading conversations…
         </div>
       ) : error ? (
@@ -604,7 +556,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({
           <button
             type="button"
             onClick={() => loadLeads()}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#f59e0b] text-[#150f05] font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#f59e0b] text-[#150f05] font-display font-bold text-xs tracking-wide"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Retry
@@ -625,8 +577,10 @@ export const QueuePage: React.FC<QueuePageProps> = ({
           onSelectLead={handleSelect}
           onBack={handleBack}
           onChangeStatus={handleChangeStatus}
+          onChangeType={handleChangeType}
         />
       )}
+      <PlatformFooter />
     </div>
   );
 };

@@ -4,10 +4,13 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { SetPasswordPage } from './pages/SetPasswordPage';
 import { QueuePage } from './pages/QueuePage';
 import { SetupPage } from './pages/SetupPage'; // SETUP
+import { RegistrationPage } from './pages/RegistrationPage'; // REGISTRATION
 import { SettingsPage } from './pages/SettingsPage'; // SETTINGS
+import { ContactsPage } from './pages/ContactsPage'; // CONTACTS
 import { AdminPage } from './pages/AdminPage'; // ADMIN
 import { NotFoundPage } from './pages/NotFoundPage';
-import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { authApi } from './api';
+import { parseTarget } from './domain';
 import { clearAccountCache } from './lib/accountCache';
 
 
@@ -58,7 +61,7 @@ export default function App() {
   const [currentPath, setCurrentPath] = useState<string>(getInitialPath);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (!authApi.isConfigured) {
       setIsAuthChecking(false);
       return;
     }
@@ -66,9 +69,9 @@ export default function App() {
     let isMounted = true;
 
     // wait for Supabase to initialize, but never hang if it fails
-    supabase.auth
+    authApi
       .getSession()
-      .then(({ data: { session } }) => {
+      .then(({ session }) => {
         if (!isMounted) return;
         setIsAuthenticated(Boolean(session?.user));
         setUserEmail(session?.user?.email || '');
@@ -85,7 +88,7 @@ export default function App() {
       });
 
     // Register onAuthStateChange once
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const stopListening = authApi.onChange((event, session) => {
       if (!isMounted) return;
 
       if (event === 'PASSWORD_RECOVERY' || (session?.user)) {
@@ -100,7 +103,7 @@ export default function App() {
 
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
+      stopListening();
     };
   }, []);
 
@@ -117,11 +120,9 @@ export default function App() {
   }, []);
 
   const navigate = (to: string) => {
-    const pathOnly = to.split('?')[0];
-    const searchOnly = to.includes('?') ? '?' + to.split('?')[1] : '';
-    const clean = getCleanPath(pathOnly);
-    const targetUrl = clean + searchOnly;
-    window.history.pushState({}, '', targetUrl);
+    const t = parseTarget(to);
+    const clean = getCleanPath(t.path);
+    window.history.pushState({}, '', clean + t.search + t.hash);
     setCurrentPath(clean);
   };
 
@@ -132,9 +133,9 @@ export default function App() {
   };
 
   const handleSignOut = async () => {
-    if (isSupabaseConfigured) {
+    if (authApi.isConfigured) {
       try {
-        await supabase.auth.signOut();
+        await authApi.signOut();
       } catch (err) {
         console.warn('Sign out error:', err);
       }
@@ -152,7 +153,7 @@ export default function App() {
           <div className="w-12 h-12 rounded-2xl bg-[#252939] border border-[#f59e0b]/50 flex items-center justify-center shadow-sm">
             <div className="w-5 h-5 border-2 border-[#f59e0b] border-t-transparent rounded-full animate-spin" />
           </div>
-          <p className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-slate-400 font-bold">
+          <p className="font-body text-xs tracking-wide text-slate-400 font-bold">
             Checking your link…
           </p>
         </div>
@@ -167,6 +168,8 @@ export default function App() {
   const isDirect404Preview = currentPath === '/404' || currentPath === '/not-found';
   const isQueuePage = currentPath === '/queue' || currentPath === '/dashboard';
   const isSetupPage = currentPath === '/setup' || currentPath === '/settings'; // SETUP and SETTINGS
+  const isContactsPage = currentPath === '/contacts'; // CONTACTS
+  const isRegistrationPage = currentPath === '/registration'; // REGISTRATION
   const isAdminRoute = currentPath === '/admin' || currentPath.startsWith('/admin/'); // ADMIN
   const adminAccountId = currentPath.startsWith('/admin/') ? currentPath.slice('/admin/'.length).split('/')[0] : null; // ADMIN
   const isConversationsRoute = currentPath.startsWith('/conversations/');
@@ -181,17 +184,17 @@ export default function App() {
   // Rule 1: NEVER redirect signed-out or signed-in users away from /set-password
   if (isSetPasswordPage) {
     return (
-      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
+      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
         <SetPasswordPage onNavigate={navigate} />
       </div>
     );
   }
 
   // Rule 2: Protect /queue, /setup and /conversations/:id: if user is signed out, redirect to /login
-  if (!isAuthenticated && (isQueuePage || isConversationsRoute || isSetupPage || isAdminRoute)) { // SETUP
+  if (!isAuthenticated && (isQueuePage || isConversationsRoute || isSetupPage || isContactsPage || isRegistrationPage || isAdminRoute)) { // SETUP
     window.history.replaceState({}, '', '/login');
     return (
-      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
+      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
         <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
       </div>
     );
@@ -201,17 +204,17 @@ export default function App() {
   if (isAuthenticated && isLoginPage) {
     window.history.replaceState({}, '', '/queue');
     return (
-      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
+      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
         <QueuePage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} />
       </div>
     );
   }
 
   // Rule 4: Unknown route and signed out: redirect to /login
-    if (!isAuthenticated && !isKnownPublicRoute && !isQueuePage && !isConversationsRoute && !isSetupPage && !isAdminRoute) { // SETUP
+    if (!isAuthenticated && !isKnownPublicRoute && !isQueuePage && !isConversationsRoute && !isSetupPage && !isContactsPage && !isRegistrationPage && !isAdminRoute) { // SETUP
     window.history.replaceState({}, '', '/login');
     return (
-      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
+      <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
         <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
       </div>
     );
@@ -219,7 +222,7 @@ export default function App() {
 
   // Render view
   return (
-    <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-['Inter'] selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen bg-[#0e1322] text-[#dee1f7] font-body selection:bg-[#f59e0b]/30 selection:text-[#ffc174] flex flex-col w-full max-w-full overflow-x-hidden">
       {isDirect404Preview ? (
         <NotFoundPage onNavigate={navigate} />
       ) : isForgotPasswordPage ? (
@@ -227,6 +230,18 @@ export default function App() {
             ) : isAdminRoute ? ( // ADMIN
         isAuthenticated ? (
           <AdminPage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} accountId={adminAccountId} />
+        ) : (
+          <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
+        )
+      ) : isRegistrationPage ? ( // REGISTRATION
+        isAuthenticated ? (
+          <RegistrationPage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} />
+        ) : (
+          <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
+        )
+      ) : isContactsPage ? ( // CONTACTS
+        isAuthenticated ? (
+          <ContactsPage onNavigate={navigate} onSignOut={handleSignOut} userEmail={userEmail} />
         ) : (
           <LoginPage onNavigate={navigate} onSignIn={handleSignIn} />
         )

@@ -47,10 +47,10 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({ onNavigate }) => {
 
             {/* Wordmark + 404 Badge */}
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
-              <span className="font-['Space_Grotesk'] text-xl sm:text-3xl uppercase tracking-tight text-slate-100 font-black">
+              <span className="font-display text-xl sm:text-3xl tracking-tight text-slate-100 font-extrabold">
                 WEDGE<span className="text-[#ffc174]">SCALE</span>
               </span>
-              <span className="font-['JetBrains_Mono'] text-[10px] sm:text-sm font-bold uppercase tracking-widest text-[#ffc174] bg-[#252939] border border-[#ffc174]/40 px-2.5 sm:px-3 py-0.5 rounded-lg shadow-sm">
+              <span className="font-body text-[11px] sm:text-sm font-bold tracking-wide text-[#ffc174] bg-[#252939] border border-[#ffc174]/40 px-2.5 sm:px-3 py-0.5 rounded-lg shadow-sm">
                 404
               </span>
             </div>
@@ -59,7 +59,7 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({ onNavigate }) => {
           {/* Minimalist Message & Action */}
           <div className="space-y-6 pt-1 sm:pt-2">
             <div className="p-4 sm:p-5 rounded-xl bg-[#0a0e1a] border border-[#272e42] text-center shadow-sm">
-              <p className="font-['Inter'] text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
+              <p className="font-body text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
                 Page unavailable. Return to your live dispatch queue.
               </p>
             </div>
@@ -69,10 +69,10 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({ onNavigate }) => {
               <button
                 type="button"
                 onClick={handleBackToQueue}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-['Space_Grotesk'] text-xs sm:text-base font-black uppercase tracking-widest text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#f59e0b] hover:bg-[#fbbf24] py-3.5 sm:py-4.5 px-6 font-display text-xs sm:text-base font-extrabold tracking-wide text-[#181105] shadow-[0_12px_28px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer border border-[#d97707]/60"
               >
                 <ArrowLeft className="w-4 h-4" />
-                BACK TO QUEUE
+                Back to dashboard
               </button>
             </div>
           </div>
@@ -81,7 +81,7 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({ onNavigate }) => {
 
       {/* Bottom Footer Line */}
       <div className="w-full text-center z-10 pt-8 pb-2">
-        <p className="font-['JetBrains_Mono'] text-xs text-slate-500 uppercase tracking-widest">
+        <p className="font-body text-xs text-slate-500 tracking-wide">
           WedgeScale Dashboard Platform
         </p>
       </div>

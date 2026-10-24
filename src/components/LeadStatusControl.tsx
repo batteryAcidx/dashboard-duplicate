@@ -111,7 +111,7 @@ export const LeadStatusControl: React.FC<Props> = ({
         onClick={() => (open ? close() : setOpen(true))}
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-['Space_Grotesk'] text-xs sm:text-[13px] font-bold cursor-pointer transition-colors ${chipTone}`}
+        className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 font-display text-sm font-semibold cursor-pointer transition-colors ${chipTone}`}
       >
         <span>
           {STATUS_LABEL[status]}
@@ -128,11 +128,11 @@ export const LeadStatusControl: React.FC<Props> = ({
           {/* bottom sheet on phones, dropdown on larger screens */}
           <div
             role="menu"
-            className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[#222c42] bg-[#0f1422] p-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-full sm:mt-2 sm:w-64 sm:rounded-xl sm:border sm:p-1.5 sm:pb-1.5 sm:shadow-[0_12px_32px_rgba(0,0,0,0.65)]"
+            className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[#222c42] bg-[#0f1422] p-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:absolute sm:inset-x-auto sm:bottom-auto menu-panel sm:right-0 sm:top-full sm:mt-2 sm:w-64 sm:rounded-xl sm:border sm:p-1.5 sm:pb-1.5 sm:shadow-[0_12px_32px_rgba(0,0,0,0.65)]"
           >
             {view === 'list' ? (
               <>
-                <div className="px-3 pt-2 pb-1.5 font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+                <div className="px-3 pt-2 pb-1.5 font-body text-[11px] tracking-wide text-slate-500 font-semibold">
                   Set status
                 </div>
 
@@ -143,7 +143,7 @@ export const LeadStatusControl: React.FC<Props> = ({
                     role="menuitem"
                     disabled={saving}
                     onClick={() => handlePick(s)}
-                    className="w-full flex items-center justify-between gap-3 px-3 py-3 sm:py-2 rounded-lg text-left text-sm font-['Space_Grotesk'] font-bold text-slate-200 hover:bg-[#192236] cursor-pointer disabled:opacity-50"
+                    className="w-full flex items-center justify-between gap-3 px-3 py-3 sm:py-2 rounded-lg text-left text-sm font-display font-bold text-slate-200 hover:bg-[#192236] cursor-pointer disabled:opacity-50"
                   >
                     <span>{STATUS_LABEL[s]}</span>
                     {s === status && <Check className="w-4 h-4 text-[#ffc174]" />}
@@ -154,20 +154,20 @@ export const LeadStatusControl: React.FC<Props> = ({
                   <button
                     type="button"
                     onClick={() => handlePick('won')}
-                    className="w-full px-3 py-2 text-left font-['JetBrains_Mono'] text-xs text-slate-400 hover:text-[#ffc174] cursor-pointer"
+                    className="w-full px-3 py-2 text-left font-data text-xs text-slate-400 hover:text-[#ffc174] cursor-pointer"
                   >
                     {finalValue ? 'Edit job value' : 'Add job value'}
                   </button>
                 )}
 
                 {error && (
-                  <p role="alert" className="px-3 py-1.5 text-xs text-red-400 font-['Inter']">
+                  <p role="alert" className="px-3 py-1.5 text-xs text-red-400 font-body">
                     {error}
                   </p>
                 )}
 
                 {/* who changed it, and when */}
-                <div className="mt-1 border-t border-[#1b2336] px-3 pt-2.5 pb-1 font-['JetBrains_Mono'] text-[11px] text-slate-500">
+                <div className="mt-1 border-t border-[#1b2336] px-3 pt-2.5 pb-1 font-data text-[11px] text-slate-500">
                     {changedBy === 'owner'
                     ? 'Updated by you'
                     : changedBy === 'support'
@@ -178,11 +178,11 @@ export const LeadStatusControl: React.FC<Props> = ({
               </>
             ) : (
               <div className="p-3 space-y-3">
-                <div className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+                <div className="font-body text-[11px] tracking-wide text-slate-500 font-semibold">
                   Final job value
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="font-['JetBrains_Mono'] text-sm text-slate-400">$</span>
+                  <span className="font-data text-sm text-slate-400">$</span>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -193,11 +193,11 @@ export const LeadStatusControl: React.FC<Props> = ({
                       if (e.key === 'Enter') handleSaveValue();
                     }}
                     placeholder="12500"
-                    className="flex-1 min-w-0 bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg x-3 py-2 text-base sm:text-sm font-['JetBrains_Mono'] text-slate-100 placeholder:text-slate-600"
+                    className="flex-1 min-w-0 bg-[#090d18] border border-[#232839] focus:border-[#f59e0b] focus:outline-none rounded-lg x-3 py-2 text-base sm:text-sm font-data text-slate-100 placeholder:text-slate-600"
                   />
                 </div>
                 {error && (
-                  <p role="alert" className="text-xs text-red-400 font-['Inter']">
+                  <p role="alert" className="text-xs text-red-400 font-body">
                     {error}
                   </p>
                 )}
@@ -206,7 +206,7 @@ export const LeadStatusControl: React.FC<Props> = ({
                     type="button"
                     onClick={handleSaveValue}
                     disabled={saving}
-                    className="px-4 py-2 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                    className="px-4 py-2 rounded-lg bg-[#f59e0b] hover:bg-[#fbbf24] text-[#150f05] font-display font-bold text-xs tracking-wide cursor-pointer disabled:opacity-50"
                   >
                     {saving ? 'Saving…' : 'Save'}
                   </button>
@@ -216,7 +216,7 @@ export const LeadStatusControl: React.FC<Props> = ({
                       setView('list');
                       setError(null);
                     }}
-                    className="px-3 py-2 font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-slate-400 hover:text-slate-200 cursor-pointer"
+                    className="px-3 py-2 font-body text-xs tracking-wide text-slate-400 hover:text-slate-200 cursor-pointer"
                   >
                     Back
                   </button>

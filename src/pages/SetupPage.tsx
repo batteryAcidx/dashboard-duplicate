@@ -1,21 +1,15 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Clock, AlertCircle, Circle, LogOut, ArrowLeft, RotateCcw } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, RotateCcw } from 'lucide-react';
+import { isConfigured, ownerApi } from '../api';
 import { usePullToRefresh, PullIndicator } from '../lib/usePullToRefresh';
 import { getCachedCompany, setCachedCompany } from '../lib/accountCache';
-
-type StepStatus = 'pending' | 'in_progress' | 'waiting_on_you' | 'done';
-
-interface StepRow {
-  id: string;
-  step_key: string;
-  title: string;
-  description: string | null;
-  status: StepStatus;
-  note: string | null;
-  sort_order: number;
-  completed_at: string | null;
-}
+import { AppHeader } from '../components/AppHeader';
+import { PlatformFooter } from '../components/PlatformFooter';
+import { SetupStepCard } from '../components/SetupStepCard';
+import { SetupNeeds } from '../components/SetupNeeds';
+import type { ClientStep } from '../domain/index';
+import { Notice } from '../components/ui';
+import { submitErrorText } from '../domain/setup';
 
 interface SetupPageProps {
   onNavigate?: (path: string) => void;
@@ -23,78 +17,40 @@ interface SetupPageProps {
   userEmail?: string;
 }
 
-const TAGS: Record<StepStatus, { label: string; cls: string }> = {
-  done: { label: 'Done', cls: 'text-[#ffc174] border-[#ffc174]/30 bg-[#ffc174]/10' },
-  in_progress: { label: 'In progress', cls: 'text-slate-300 border-[#2b354d] bg-[#151b2b]' },
-  waiting_on_you: { label: 'Waiting on you', cls: 'text-[#ffc174] border-[#f59e0b]/60 bg-[#261d10]' },
-  pending: { label: 'Up next', cls: 'text-slate-400 border-[#232839] bg-[#0a0e19]' },
-};
-
-const StepIcon: React.FC<{ status: StepStatus }> = ({ status }) => {
-  const base = 'w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border';
-  if (status === 'done') {
-    return (
-      <div className={`${base} bg-[#f59e0b]/10 border-[#f59e0b]/40`}>
-        <Check className="w-5 h-5 text-[#ffc174]" />
-      </div>
-    );
-  }
-  if (status === 'waiting_on_you') {
-    return (
-      <div className={`${base} bg-[#261d10] border-[#f59e0b]/60`}>
-        <AlertCircle className="w-5 h-5 text-[#ffc174]" />
-      </div>
-    );
-  }
-  if (status === 'in_progress') {
-    return (
-      <div className={`${base} bg-[#151b2b] border-[#2b354d]`}>
-        <Clock className="w-5 h-5 text-slate-300" />
-      </div>
-    );
-  }
-  return (
-    <div className={`${base} bg-[#0a0e19] border-[#232839]`}>
-      <Circle className="w-5 h-5 text-slate-600" />
-    </div>
-  );
-};
-
-const dateLabel = (iso: string | null, tz: string) =>
-  iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: tz }) : '';
+interface Calendar {
+  status: string;
+  label: string | null;
+}
 
 export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, userEmail = '' }) => {
-  const [steps, setSteps] = useState<StepRow[]>([]);
+  const [steps, setSteps] = useState<ClientStep[]>([]);
   const [companyName, setCompanyName] = useState(getCachedCompany(userEmail));
+  const [accountId, setAccountId] = useState<string | null>(null);
   const [tz, setTz] = useState('America/Chicago');
   const [accountStatus, setAccountStatus] = useState('setup');
+  const [calendar, setCalendar] = useState<Calendar | null>(null);
+  const [registration, setRegistration] = useState<{ status: string; submitted_at: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
+  const [banner, setBanner] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
 
   const load = useCallback(async (silent = false) => {
-    if (!isSupabaseConfigured) {
+    if (!isConfigured) {
       setError('The dashboard is not connected to its database. Contact support.');
       setLoading(false);
       return;
     }
     if (!silent) setLoading(true);
 
-    const [acc, st] = await Promise.all([
-      supabase.from('accounts').select('name, timezone, status').maybeSingle(),
-      supabase.from('setup_steps').select('*').order('sort_order', { ascending: true }),
+    const [acc, st, cal, reg] = await Promise.all([
+      ownerApi.account.withId(),
+      ownerApi.setup.steps(),
+      ownerApi.setup.calendarConnection(),
+      ownerApi.registration.get(),
     ]);
 
     if (acc.data) {
+      setAccountId(acc.data.id);
       if (acc.data.name) {
         setCompanyName(acc.data.name);
         setCachedCompany(userEmail, acc.data.name);
@@ -102,21 +58,40 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
       if (acc.data.timezone) setTz(acc.data.timezone);
       if (acc.data.status) setAccountStatus(acc.data.status);
     }
+    setRegistration(reg.data?.status ? { status: reg.data.status, submitted_at: reg.data.submitted_at ?? null } : null);
+    setCalendar(cal.data && cal.data.provider !== 'none' ? { status: cal.data.status, label: cal.data.calendar_label ?? null } : null);
 
     if (st.error) {
       if (!silent) setError(st.error.message || 'Failed to load setup progress.');
     } else {
       setError(null);
-      setSteps((st.data as StepRow[]) || []);
+      setSteps((st.data as ClientStep[]) || []);
     }
     setLoading(false);
   }, [userEmail]);
 
+  // loads, then keeps itself up to date quietly. On a phone, pulling down refreshes right away.
   useEffect(() => {
     load();
     const t = setInterval(() => load(true), 60000);
     return () => clearInterval(t);
   }, [load]);
+
+  // Google sends the owner back here with ?calendar=connected or ?calendar=error
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const result = url.searchParams.get('calendar');
+    if (!result) return;
+    url.searchParams.delete('calendar');
+    window.history.replaceState({}, '', url.pathname + (url.search || ''));
+    if (result === 'connected') {
+      setBanner({ tone: 'ok', text: 'Your calendar is connected. Thank you.' });
+      ownerApi.setup.syncCalendar(accountId).finally(() => load(true));
+    } else {
+      setBanner({ tone: 'error', text: 'The calendar was not connected. Please try again, and make sure the calendar box is ticked.' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pull = usePullToRefresh(() => load(true));
 
@@ -125,206 +100,110 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onNavigate, onSignOut, use
     else window.location.assign(path);
   };
 
+  const submitInfo = async (stepKey: string, values: Record<string, string>): Promise<string | null> => {
+    const { error: err } = await ownerApi.setup.submitInfo(stepKey, values);
+    if (err) return submitErrorText(err);
+    await load(true);
+    return null;
+  };
+
+  const connectCalendar = async (): Promise<string | null> => {
+    if (!accountId) return 'Something went wrong. Please try again.';
+    const { data, error: err } = await ownerApi.setup.connectCalendar(accountId);
+    if (err || !data?.url) return 'We could not open Google right now. Please try again, or reply to our email and we will help.';
+    window.location.assign(data.url);
+    return null;
+  };
+
   const total = steps.length;
   const done = steps.filter((s) => s.status === 'done').length;
   const percent = total > 0 ? Math.round((done / total) * 100) : 0;
   const isLive = accountStatus === 'live' || (total > 0 && done === total);
-  const waiting = steps.filter((s) => s.status === 'waiting_on_you');
-const initial = (userEmail || 'U').charAt(0).toUpperCase();
 
   return (
-    <div className="min-h-screen w-full bg-[#090e1c] text-[#dee1f7] font-['Inter']">
-          <PullIndicator pull={pull} />
-      {/* compact header */}
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 pt-5 pb-3 flex items-center justify-between gap-4">
-        <span className="font-['Space_Grotesk'] text-lg font-bold text-slate-100 tracking-tight truncate">
-          {companyName}
-        </span>
-        <div className="relative" ref={menuRef}>
-          <button
-            type="button"
-            onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#111728] border border-[#212b42] text-slate-300 text-xs"
-            aria-expanded={menuOpen}
-            aria-label="Account menu"
-          >
-            <span className="w-6 h-6 rounded-full bg-[#1e273d] border border-[#2d3a5a] flex items-center justify-center text-[11px] font-bold text-[#ffc174] shrink-0 sm:hidden">
-              {initial}
-            </span>
-            <span className="max-w-[160px] truncate hidden sm:inline">{userEmail}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#0f1422] border border-[#222c42] py-1.5 z-50">
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  goto('/queue');
-                }}
-                className="w-full px-4 py-3 text-sm text-slate-300 hover:text-white hover:bg-[#192236] text-left"
-              >
-                Dashboard
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  goto('/settings');
-                }}
-                className="w-full px-4 py-3 text-sm text-slate-300 hover:text-white hover:bg-[#192236] text-left"
-              >
-                Settings
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onSignOut?.();
-                }}
-                className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-300 hover:text-red-400 hover:bg-[#192236] text-left"
-              >
-                <LogOut className="w-4 h-4" />
-                Sign out
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="min-h-screen w-full bg-[#090e1c] font-body text-[#dee1f7]">
+      <PullIndicator pull={pull} />
+      <AppHeader companyName={companyName} userEmail={userEmail} current="setup" onNavigate={goto} onSignOut={onSignOut} />
 
-      <main className="mx-auto max-w-3xl px-4 sm:px-6 pb-[max(4rem,env(safe-area-inset-bottom))]">
+      <main className="mx-auto max-w-3xl px-5 pb-[max(5rem,env(safe-area-inset-bottom))] sm:px-8">
         <button
           type="button"
           onClick={() => goto('/queue')}
-          className="inline-flex items-center gap-1.5 mt-3 -ml-1 pl-1 pr-3 py-2.5 text-sm font-['Space_Grotesk'] font-bold text-slate-300 hover:text-[#ffc174] transition-colors cursor-pointer"
+          className="mt-4 -ml-1 inline-flex cursor-pointer items-center gap-2 py-2.5 pl-1 pr-3 font-display text-sm font-semibold text-slate-400 transition-colors hover:text-[#ffc174]"
         >
-          <ArrowLeft className="w-4 h-4 text-[#ffc174]" />
+          <ArrowLeft className="h-4 w-4" />
           Dashboard
         </button>
 
         {loading ? (
-          <div role="status" aria-label="Loading setup progress" className="mt-5 animate-pulse">
-            <div className="h-3 w-16 rounded bg-[#151b2b] mb-3" />
-            <div className="h-9 w-64 max-w-full rounded bg-[#151b2b] mb-6" />
-            <div className="space-y-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-20 rounded-xl bg-[#111625] border border-[#22283a]" />
-              ))}
-            </div>
+          <div role="status" aria-label="Loading setup progress" className="mt-6 animate-pulse space-y-4">
+            <div className="h-4 w-16 rounded bg-white/[0.05]" />
+            <div className="h-10 w-72 max-w-full rounded bg-white/[0.05]" />
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-24 rounded-2xl border border-white/[0.06] bg-[#0f1424]" />
+            ))}
           </div>
         ) : error ? (
-          <div className="mx-auto max-w-md py-16 text-center space-y-4">
+          <div className="mx-auto max-w-md space-y-5 py-20 text-center">
             <p className="text-base text-slate-300">{error}</p>
             <button
               type="button"
               onClick={() => load()}
-              className="inline-flex items-center gap-1.5 px-5 py-3 rounded-xl bg-[#f59e0b] text-[#150f05] font-['Space_Grotesk'] font-bold text-sm uppercase tracking-wider cursor-pointer"
+              className="inline-flex h-12 cursor-pointer items-center gap-2 rounded-xl bg-[#f59e0b] px-6 font-display text-sm font-bold text-[#150f05]"
             >
-              <RotateCcw className="w-4 h-4" />
-              Retry
+              <RotateCcw className="h-4 w-4" />
+              Try again
             </button>
           </div>
         ) : total === 0 ? (
-          <div className="mt-8 w-full min-h-[240px] flex flex-col items-center justify-center text-center p-8 rounded-xl border border-dashed border-[#232839] bg-[#0c101d]/60">
-            <h2 className="font-['Space_Grotesk'] text-lg font-bold text-slate-200 tracking-tight mb-1">
-              Your setup checklist is on its way
-            </h2>
-            <p className="text-sm text-slate-400 max-w-xs leading-relaxed">
+          <div className="mt-10 flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.09] p-10 text-center">
+            <h2 className="mb-2 font-display text-xl font-bold tracking-tight text-slate-200">Your setup checklist is on its way</h2>
+            <p className="max-w-xs text-[15px] leading-relaxed text-slate-400">
               It will appear here shortly. Questions? Email{' '}
-              <a href="mailto:contact@wedgescale.com" className="text-[#ffc174] underline underline-offset-2">
-                contact@wedgescale.com
-              </a>
-              .
+              <a href="mailto:contact@wedgescale.com" className="text-[#ffc174] underline underline-offset-4">contact@wedgescale.com</a>.
             </p>
           </div>
         ) : (
           <>
-            {/* Status header */}
-            <div className="mt-5 mb-6">
-              <span className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#f59e0b] font-bold block mb-2">
-                SETUP
-              </span>
-              <h1 className="font-['Space_Grotesk'] text-3xl sm:text-4xl font-black uppercase tracking-tight text-slate-100 leading-none">
+            <div className="mb-8 mt-6">
+              <span className="mb-2 block text-sm font-semibold text-[#f59e0b]">Setup</span>
+              <h1 className="font-display text-3xl font-extrabold tracking-tight text-slate-100 sm:text-4xl">
                 {isLive ? "You're live." : 'Getting you live.'}
               </h1>
-              <p className="mt-3 text-base text-slate-300 leading-relaxed">
+              <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-300">
                 {isLive
                   ? 'Every missed call gets a reply within minutes.'
-                  : `${done} of ${total} steps complete. Carrier approval typically takes 2-3 weeks, and we keep working on everything else in the meantime.`}
+                  : `${done} of ${total} steps complete. Carrier approval typically takes 2 to 3 weeks, and we keep working on everything else in the meantime.`}
               </p>
-
               {!isLive && (
-                <div className="mt-4 h-2 w-full rounded-full bg-[#151b2b] overflow-hidden" aria-hidden="true">
+                <div className="mt-5 h-2.5 w-full overflow-hidden rounded-full bg-white/[0.06]" aria-hidden="true">
                   <div className="h-full rounded-full bg-[#f59e0b] transition-all duration-500" style={{ width: `${percent}%` }} />
                 </div>
               )}
             </div>
 
-            {/* What we need from you */}
-            {!isLive && waiting.length > 0 && (
-              <div className="mb-6 p-4 sm:p-5 rounded-xl bg-[#1a1710] border border-[#f59e0b]/40">
-                <p className="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#ffc174] font-bold mb-2.5">
-                  {waiting.length === 1 ? 'We need one thing from you' : `We need ${waiting.length} things from you`}
-                </p>
-                <ul className="space-y-2.5">
-                  {waiting.map((s) => (
-                    <li key={s.id} className="text-[15px] text-slate-100 leading-relaxed">
-                      <span className="font-['Space_Grotesk'] font-bold">{s.title}.</span>{' '}
-                      {s.note && <span className="text-slate-300">{s.note}</span>}
-                    </li>
-                  ))}
-                </ul>
+            {banner && (
+              <div className="mb-6">
+                <Notice tone={banner.tone}>{banner.text}</Notice>
               </div>
             )}
 
-            {/* Steps */}
-            <ol className="space-y-3">
-              {steps.map((s) => {
-                const tag = TAGS[s.status];
-                return (
-                  <li
-                    key={s.id}
-                    className={`p-4 sm:p-5 rounded-xl border bg-[#111625] ${
-                      s.status === 'waiting_on_you' ? 'border-[#f59e0b]/40' : 'border-[#22283a]'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3.5">
-                      <StepIcon status={s.status} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-x-3 gap-y-1.5 flex-wrap">
-                          <h2 className="font-['Space_Grotesk'] text-base sm:text-[17px] font-bold text-slate-100 tracking-tight">
-                            {s.title}
-                          </h2>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-['JetBrains_Mono'] uppercase tracking-wider font-semibold shrink-0 ${tag.cls}`}
-                          >
-                            {tag.label}
-                            {s.status === 'done' && s.completed_at ? ` · ${dateLabel(s.completed_at, tz)}` : ''}
-                          </span>
-                        </div>
-                        {s.description && (
-                          <p className="mt-1.5 text-sm sm:text-[15px] text-slate-400 leading-relaxed">{s.description}</p>
-                        )}
-                        {s.note && s.status !== 'done' && s.status !== 'waiting_on_you' && (
-                          <p className="mt-2 text-sm sm:text-[15px] text-slate-200 leading-relaxed">{s.note}</p>
-                        )}
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
+            {!isLive && <SetupNeeds steps={steps} />}
+
+            <ol className="space-y-4">
+              {steps.map((s) => (
+                <SetupStepCard key={`${s.id}:${s.status}:${s.info_submitted_at ?? ''}`} step={s} tz={tz} calendar={calendar} registration={registration} onOpenRegistration={() => goto('/registration')} onSubmit={submitInfo} onConnectCalendar={connectCalendar} />
+              ))}
             </ol>
 
-            <p className="mt-8 text-sm text-slate-400 leading-relaxed">
+            <p className="mt-10 text-sm leading-relaxed text-slate-400">
               Questions? Email{' '}
-              <a href="mailto:contact@wedgescale.com" className="text-[#ffc174] underline underline-offset-2">
-                contact@wedgescale.com
-              </a>
-              .
+              <a href="mailto:contact@wedgescale.com" className="text-[#ffc174] underline underline-offset-4">contact@wedgescale.com</a>.
             </p>
           </>
         )}
       </main>
+      <PlatformFooter />
     </div>
   );
 };
